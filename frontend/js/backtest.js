@@ -161,17 +161,69 @@ function renderAllResults(data) {
         if (document.getElementById('heroTp3Rate')) document.getElementById('heroTp3Rate').textContent = "%0";
     }
 
-    // 2. Liderlik Tablosu (Leaderboard)
+    renderLeaderboardRows(leaderboard);
+
+    // Varsayılan olarak şampiyon stratejinin işlemlerini göster
+    if (champ && champ.recent_trades && champ.recent_trades.length > 0) {
+        renderTradesTable(champ.recent_trades, champ.name);
+    } else if (leaderboard.length > 0 && leaderboard[0].recent_trades) {
+        renderTradesTable(leaderboard[0].recent_trades, leaderboard[0].name);
+    } else {
+        renderTradesTable([], "Strateji");
+    }
+}
+
+let activeCategoryFilter = 'ALL';
+
+function filterLeaderboard(cat) {
+    activeCategoryFilter = cat;
+    ['ALL', 'PATTERNS', 'CUSTOM', 'SMC'].forEach(c => {
+        const btn = document.getElementById(`filterBtn${c}`);
+        if (btn) {
+            if (c === cat) {
+                btn.className = "px-2.5 py-1 rounded-lg bg-amber-500 text-gray-950 font-bold text-[11px] cursor-pointer transition";
+            } else {
+                btn.className = "px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold text-[11px] cursor-pointer transition";
+            }
+        }
+    });
+    if (currentBacktestData && currentBacktestData.leaderboard) {
+        renderLeaderboardRows(currentBacktestData.leaderboard);
+    }
+}
+
+function renderLeaderboardRows(leaderboard) {
     const tbody = document.getElementById('leaderboardTbody');
+    if (!tbody) return;
     tbody.innerHTML = '';
 
-    leaderboard.forEach((s, idx) => {
-        const isChamp = idx === 0 && s.total_trades >= 1;
+    const filtered = leaderboard.filter(s => {
+        if (activeCategoryFilter === 'ALL') return true;
+        if (activeCategoryFilter === 'PATTERNS') {
+            return s.id.includes('trendline') || s.id.includes('triangle') || s.id.includes('sr_flip') || s.id.includes('range') || s.id.includes('double') || s.id.includes('chart_patterns');
+        }
+        if (activeCategoryFilter === 'CUSTOM') {
+            return s.id.includes('pdh_pdl') || s.id.includes('swing_hl');
+        }
+        if (activeCategoryFilter === 'SMC') {
+            return s.id.includes('smc');
+        }
+        return true;
+    });
+
+    filtered.forEach((s, idx) => {
+        const isChamp = idx === 0 && s.total_trades >= 1 && activeCategoryFilter === 'ALL';
         const rankBadge = isChamp 
             ? '<span class="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 font-extrabold border border-amber-500/40 shadow-sm flex items-center gap-1">🏆 #1 ŞAMPİYON</span>'
             : `<span class="text-gray-400 font-bold text-sm">#${idx + 1}</span>`;
 
         const netColor = s.net_profit_pct >= 0 ? 'text-emerald-400' : 'text-rose-400';
+
+        let customBadge = '';
+        if (s.id === 'pdh_pdl_breakout_retest_user') customBadge = '<span class="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[9px] font-bold">⭐ 1. STRATEJİ</span>';
+        else if (s.id === 'swing_hl_breakout_retest') customBadge = '<span class="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-[9px] font-bold">🌊 2. STRATEJİ</span>';
+        else if (s.id === 'chart_patterns_all') customBadge = '<span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-bold">📐 3. STRATEJİ</span>';
+        else if (s.category.includes('Formasyon') || s.category.includes('Kilit')) customBadge = '<span class="px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300 border border-orange-500/40 text-[9px] font-bold">📐 FORMASYON</span>';
 
         const tr = document.createElement('tr');
         tr.className = `cursor-pointer transition ${isChamp ? 'bg-amber-500/10 hover:bg-amber-500/15' : 'hover:bg-gray-800/40'}`;
@@ -190,7 +242,7 @@ function renderAllResults(data) {
                     <div>
                         <div class="font-bold text-white text-sm flex items-center gap-1.5">
                             <span>${s.name}</span>
-                            ${s.id === 'pdh_pdl_breakout_retest_user' ? '<span class="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[9px] font-bold">ÖZEL STRATEJİM</span>' : ''}
+                            ${customBadge}
                         </div>
                         <div class="text-[11px] text-gray-400 font-mono">${s.name_en}</div>
                     </div>
@@ -215,15 +267,6 @@ function renderAllResults(data) {
         `;
         tbody.appendChild(tr);
     });
-
-    // Varsayılan olarak şampiyon stratejinin işlemlerini göster
-    if (champ && champ.recent_trades && champ.recent_trades.length > 0) {
-        renderTradesTable(champ.recent_trades, champ.name);
-    } else if (leaderboard.length > 0 && leaderboard[0].recent_trades) {
-        renderTradesTable(leaderboard[0].recent_trades, leaderboard[0].name);
-    } else {
-        renderTradesTable([], "Strateji");
-    }
 }
 
 function selectStrategyForTradesView(strategy) {

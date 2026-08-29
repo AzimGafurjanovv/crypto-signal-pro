@@ -79,9 +79,21 @@ ALL_STRATEGIES = [
     },
     {
         'id': 'pdh_pdl_breakout_retest_user',
-        'name': 'Önceki Gün Zirve/Dip Kırılımı + Retest (Benim)',
-        'name_en': 'PDH/PDL Breakout & Retest (Benim)',
+        'name': '1. Strateji: PDH / PDL Günlük Likidite Breakout-Retest',
+        'name_en': '1. PDH/PDL Daily Breakout & Retest',
         'category': 'Kullanıcı Özel Stratejisi'
+    },
+    {
+        'id': 'swing_hl_breakout_retest',
+        'name': '2. Strateji: Yapısal Swing High/Low Kırılımı',
+        'name_en': '2. Swing High/Low Breakout & Retest',
+        'category': 'Kullanıcı Özel Stratejisi'
+    },
+    {
+        'id': 'chart_patterns_all',
+        'name': '3. Strateji: Tüm Grafik Formasyonları (Kompozit)',
+        'name_en': '3. Chart Patterns Master Strategy',
+        'category': 'Formasyon Radarı'
     }
 ]
 
@@ -153,15 +165,14 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
             'bearish_divergence': full_div.get('bearish_divergence') if full_div.get('bearish_divergence') and (n - 1 - full_div['bearish_divergence'].get('recency_bars', 0)) <= idx else None,
         }
         
+        # Formasyon Tespiti (Son 50-60 barlık dinamik pencerede)
         patterns = []
-        for pat in full_patterns:
-            max_time = 0
-            for line in pat.get('lines', []):
-                for pt in line.get('points', []):
-                    if pt.get('time', 0) > max_time:
-                        max_time = pt.get('time', 0)
-            if max_time <= curr_time:
-                patterns.append(pat)
+        if idx >= 40:
+            sub_win = df_enriched.iloc[max(0, idx - 55) : idx + 1]
+            try:
+                patterns = detect_chart_patterns(sub_win)
+            except Exception:
+                patterns = []
 
         signals_triggered = []
 
@@ -191,14 +202,19 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
             cat = pat.get('category', '')
             if '1. Trend' in cat:
                 signals_triggered.append(('trendline_breakout', p_type, curr_price))
+                signals_triggered.append(('chart_patterns_all', p_type, curr_price))
             elif '2. Simetrik' in cat or 'Üçgen' in cat:
                 signals_triggered.append(('triangle_breakout', p_type, curr_price))
+                signals_triggered.append(('chart_patterns_all', p_type, curr_price))
             elif '3. S/R' in cat:
                 signals_triggered.append(('sr_flip_retest', p_type, curr_price))
+                signals_triggered.append(('chart_patterns_all', p_type, curr_price))
             elif '4. Range' in cat:
                 signals_triggered.append(('range_breakout', p_type, curr_price))
+                signals_triggered.append(('chart_patterns_all', p_type, curr_price))
             elif '5. Double' in cat:
                 signals_triggered.append(('double_bottom_top', p_type, curr_price))
+                signals_triggered.append(('chart_patterns_all', p_type, curr_price))
             elif '6. PDH/PDL' in cat or 'Benim' in cat:
                 signals_triggered.append(('pdh_pdl_breakout_retest_user', p_type, curr_price))
 
@@ -218,7 +234,7 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
         elif curr_price < ema20 < ema50 < ema200:
             signals_triggered.append(('ema_ribbon', 'SHORT', curr_price))
 
-        # --- G. PDH / PDL (Kullanıcı Stratejisi Doğrudan Taraması) ---
+        # --- G. PDH / PDL (1. Strateji: Kullanıcı Stratejisi Doğrudan Taraması) ---
         lookback_pd = 24 if idx >= 48 else idx // 2
         if idx >= 30:
             prev_day_sub = df_enriched.iloc[max(0, idx - lookback_pd*2) : idx - lookback_pd]
@@ -238,7 +254,23 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
                     if r_high >= pdl_val * 0.990 and float(curr_bar['close']) <= float(curr_bar['open']):
                         signals_triggered.append(('pdh_pdl_breakout_retest_user', 'SHORT', curr_price))
 
-        # --- H. Super Confluence (Birden fazla strateji kesişimi) ---
+        # --- H. Yapısal Swing High / Low (2. Strateji: Doğrudan Taraması) ---
+        if idx >= 30:
+            sub_highs, sub_lows = find_swing_points(df_enriched.iloc[:idx+1], window=3)
+            if sub_highs:
+                last_sh = sub_highs[-1]
+                if (idx - last_sh['index']) <= 15:
+                    if curr_price >= last_sh['price'] * 0.998 and float(df_enriched['low'].iloc[max(0, idx-3):idx+1].min()) <= last_sh['price'] + 0.3 * curr_atr:
+                        if float(curr_bar['close']) >= float(curr_bar['open']):
+                            signals_triggered.append(('swing_hl_breakout_retest', 'LONG', curr_price))
+            if sub_lows:
+                last_sl = sub_lows[-1]
+                if (idx - last_sl['index']) <= 15:
+                    if curr_price <= last_sl['price'] * 1.002 and float(df_enriched['high'].iloc[max(0, idx-3):idx+1].max()) >= last_sl['price'] - 0.3 * curr_atr:
+                        if float(curr_bar['close']) <= float(curr_bar['open']):
+                            signals_triggered.append(('swing_hl_breakout_retest', 'SHORT', curr_price))
+
+        # --- I. Super Confluence (Birden fazla strateji kesişimi) ---
         long_count = sum(1 for _, d, _ in signals_triggered if d == 'LONG')
         short_count = sum(1 for _, d, _ in signals_triggered if d == 'SHORT')
         if long_count >= 2:

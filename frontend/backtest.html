@@ -141,62 +141,57 @@
                 </div>
 
                 <!-- Testi Başlat Butonu -->
-                <button id="runBacktestBtn" class="w-full lg:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-amber-600 via-yellow-600 to-amber-500 hover:from-amber-500 hover:to-yellow-400 text-gray-950 font-black text-sm transition shadow-lg shadow-amber-600/30 flex items-center justify-center gap-2 transform active:scale-95">
+                <button id="runBacktestBtn" class="w-full lg:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-amber-600 via-yellow-600 to-amber-500 hover:from-amber-500 hover:to-yellow-400 text-gray-950 font-black text-sm transition shadow-lg shadow-amber-600/30 flex items-center justify-center gap-2 transform active:scale-95 cursor-pointer">
                     <i data-lucide="play" class="w-4 h-4 text-gray-950 fill-current"></i>
-                    <span>TÜM 11 STRATEJİYİ TEST ET (RUN BACKTEST)</span>
+                    <span>TÜM 14 STRATEJİ & FORMASYONU TEST ET</span>
                 </button>
             </div>
 
             <!-- Popüler Koin Hızlı Seçim Butonları -->
             <div class="pt-3 border-t border-gray-800/80 flex items-center gap-2 flex-wrap text-xs">
                 <span class="text-gray-400 font-semibold text-[11px]">Popüler Koinler:</span>
-                <button onclick="switchSymbol('BTC/USDT')" class="quick-sym px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 font-mono font-semibold transition border border-gray-700">BTC</button>
-                <button onclick="switchSymbol('ETH/USDT')" class="quick-sym px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 font-mono font-semibold transition border border-gray-700">ETH</button>
-                <button onclick="switchSymbol('SOL/USDT')" class="quick-sym px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 font-mono font-semibold transition border border-gray-700">SOL</button>
-                <button onclick="switchSymbol('TRX/USDT')" class="quick-sym px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 font-mono font-semibold transition border border-gray-700">TRX</button>
-                <button onclick="switchSymbol('BNB/USDT')" class="quick-sym px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 font-mono font-semibold transition border border-gray-700">BNB</button>
-                <button onclick="switchSymbol('XRP/USDT')" class="quick-sym px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 font-mono font-semibold transition border border-gray-700">XRP</button>
-                <button onclick="switchSymbol('DOGE/USDT')" class="quick-sym px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 font-mono font-semibold transition border border-gray-700">DOGE</button>
-                <button onclick="switchSymbol('AVAX/USDT')" class="quick-sym px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 font-mono font-semibold transition border border-gray-700">AVAX</button>
+                <button onclick="switchSymbol('BTC/USDT')" class="quick-sym px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 font-mono font-semibold transition border border-gray-700 cursor-pointer">BTC</button>
+                <button onclick="switchSymbol('ETH/USDT')" class="quick-sym px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 font-mono font-semibold transition border border-gray-700 cursor-pointer">ETH</button>
+                <button onclick="switchSymbol('SOL/USDT')" class="quick-sym px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 font-mono font-semibold transition border border-gray-700 cursor-pointer">SOL</button>
+                <button onclick="switchSymbol('TRX/USDT')" class="quick-sym px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 font-mono font-semibold transition border border-gray-700 cursor-pointer">TRX</button>
+                <button onclick="switchSymbol('BNB/USDT')" class="quick-sym px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 font-mono font-semibold transition border border-gray-700 cursor-pointer">BNB</button>
+                <button onclick="switchSymbol('XRP/USDT')" class="quick-sym px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 font-mono font-semibold transition border border-gray-700 cursor-pointer">XRP</button>
+                <button onclick="switchSymbol('DOGE/USDT')" class="quick-sym px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 font-mono font-semibold transition border border-gray-700 cursor-pointer">DOGE</button>
+                <button onclick="switchSymbol('AVAX/USDT')" class="quick-sym px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 font-mono font-semibold transition border border-gray-700 cursor-pointer">AVAX</button>
             </div>
         </div>
 
-        <!-- 2. YÜKLENİYOR DURUMU -->
-        <div id="loadingState" class="glass-panel rounded-2xl p-16 text-center space-y-4 border border-gray-800">
-            <div class="w-12 h-12 mx-auto border-3 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-            <h3 class="text-lg font-bold text-white">Tarihsel Mum Verileri Çekiliyor ve 11 Strateji Simüle Ediliyor...</h3>
-            <p class="text-xs text-gray-400 max-w-md mx-auto">SMC Order Block, FVG, Likidite Avı, Trendline, Üçgen, S/R Flip, Range ve Uyumsuzluklar adım adım test ediliyor.</p>
-        </div>
+        <!-- 🚀 TEST SONUÇLARI VE ANALİZ ALANI -->
+        <div id="resultsContent" class="space-y-6 hidden">
 
-        <!-- 3. SONUÇLAR ALANI (BAŞLANGIÇTA GİZLİ) -->
-        <div id="resultsContent" class="hidden space-y-6">
+            <!-- 🏆 ŞAMPİYON STRATEJİ KARTI -->
+            <div class="glass-panel p-5 sm:p-6 rounded-3xl border border-amber-500/40 relative overflow-hidden shadow-2xl bg-gradient-to-br from-gray-900/90 via-gray-900/60 to-amber-950/20">
+                <div class="absolute -right-16 -top-16 w-56 h-56 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
-            <!-- 🏆 ŞAMPİYON STRATEJİ KAHRAMAN AFİŞİ (HERO BANNER) -->
-            <div id="championHero" class="glass-panel rounded-2xl p-6 border border-amber-500/50 bg-gradient-to-r from-amber-950/30 via-indigo-950/20 to-emerald-950/20 gold-glow">
-                <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+                <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
                     
-                    <div class="flex items-center space-x-4">
-                        <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-300 text-gray-950 flex items-center justify-center flex-shrink-0 text-3xl shadow-xl shadow-amber-500/30 font-black">
-                            🏆
+                    <div class="space-y-1.5 max-w-xl">
+                        <div class="flex items-center gap-2">
+                            <span class="px-2.5 py-0.5 rounded-full bg-amber-500 text-gray-950 font-black text-[10px] tracking-wider uppercase flex items-center gap-1 shadow-md">
+                                <i data-lucide="crown" class="w-3 h-3 fill-current"></i>
+                                EN YÜKSEK SKORLU STRATEJİ
+                            </span>
+                            <span id="heroStrategyCategory" class="text-xs text-amber-300/80 font-mono font-semibold">Kategori</span>
                         </div>
-                        <div>
-                            <div class="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-2">
-                                <span class="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40">1 NUMARALI ŞAMPİYON STRATEJİ</span>
-                                <span id="heroSymbolBadge" class="font-mono text-white px-2 py-0.5 rounded bg-gray-800">BTC/USDT</span>
-                            </div>
-                            <h2 id="heroChampName" class="text-xl sm:text-2xl font-black text-white mt-1">SMC Kurumsal Emir Bloğu</h2>
-                            <p id="heroChampCategory" class="text-xs text-gray-300 mt-0.5">Smart Money Concepts • 500 Mum Analizi</p>
-                        </div>
+                        <h2 id="heroStrategyName" class="text-xl sm:text-2xl font-black text-white tracking-tight">Yükleniyor...</h2>
+                        <p id="heroStrategyDesc" class="text-xs text-gray-300 font-sans leading-relaxed">
+                            Geçmiş mum verilerinde en yüksek kâr ve başarı oranını sağlayan strateji.
+                        </p>
                     </div>
 
-                    <!-- 4 Temel Metrik Kartı -->
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full lg:w-auto font-mono">
-                        <div class="bg-gray-950/80 p-3 rounded-xl border border-gray-800 text-center">
-                            <div class="text-[10px] font-sans text-gray-400 font-semibold">ANA WIN RATE (TP2)</div>
+                    <!-- Şampiyon İstatistik Kutuları -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 w-full lg:w-auto font-mono">
+                        <div class="bg-gray-950/80 p-3 rounded-xl border border-emerald-500/30 text-center">
+                            <div class="text-[10px] font-sans text-gray-400 font-semibold">KAZANMA ORANI</div>
                             <div id="heroWinRate" class="text-lg font-black text-emerald-400 mt-0.5">%0</div>
                         </div>
                         <div class="bg-gray-950/80 p-3 rounded-xl border border-gray-800 text-center">
-                            <div class="text-[10px] font-sans text-gray-400 font-semibold">NET KÂR GETİRİSİ</div>
+                            <div class="text-[10px] font-sans text-gray-400 font-semibold">NET KÂR %</div>
                             <div id="heroNetProfit" class="text-lg font-black text-white mt-0.5">+%0</div>
                         </div>
                         <div class="bg-gray-950/80 p-3 rounded-xl border border-gray-800 text-center">
@@ -208,7 +203,6 @@
                             <div id="heroTrades" class="text-lg font-black text-indigo-400 mt-0.5">0 (0W/0L)</div>
                         </div>
                     </div>
-
                 </div>
 
                 <!-- 🎯 KADEMELİ TP1 / TP2 / TP3 KAZANMA OLASILIKLARI PANELİ -->
@@ -235,20 +229,26 @@
                         <div id="heroTp3Rate" class="text-lg font-black text-purple-400 font-mono">%0</div>
                     </div>
                 </div>
-
             </div>
 
-            <!-- 📊 12 STRATEJİ LİDERLİK SIRALAMA TABLOSU -->
+            <!-- 📊 14 STRATEJİ & FORMASYON LİDERLİK SIRALAMA TABLOSU -->
             <div class="glass-panel rounded-2xl border border-gray-800 overflow-hidden shadow-xl">
-                <div class="p-4 border-b border-gray-800 flex items-center justify-between bg-gray-900/60">
+                <div class="p-4 border-b border-gray-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 bg-gray-900/60">
                     <div>
                         <h3 class="text-sm font-bold text-white flex items-center gap-2">
                             <i data-lucide="trophy" class="w-4 h-4 text-amber-400"></i>
-                            Tüm 12 Stratejinin Başarı Sıralaması & TP1/TP2/TP3 Matrisi (Leaderboard)
+                            Tüm 14 Strateji & Grafik Formasyonunun Başarı Sıralaması (Leaderboard)
                         </h3>
                         <p class="text-[11px] text-gray-400 mt-0.5">Kademeli TP1 (1:1.0), TP2 (1:2.0) ve TP3 (1:3.5) olasılıkları ile geriye dönük simülasyon</p>
                     </div>
-                    <span id="totalTestedBadge" class="text-xs px-2.5 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 font-semibold border border-indigo-500/30">12 Strateji Test Edildi</span>
+                    
+                    <!-- Kategori Filtre Butonları -->
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <button onclick="filterLeaderboard('ALL')" id="filterBtnALL" class="px-2.5 py-1 rounded-lg bg-amber-500 text-gray-950 font-bold text-[11px] cursor-pointer transition">Tümü (14)</button>
+                        <button onclick="filterLeaderboard('PATTERNS')" id="filterBtnPATTERNS" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold text-[11px] cursor-pointer transition">📐 Formasyonlar (6)</button>
+                        <button onclick="filterLeaderboard('CUSTOM')" id="filterBtnCUSTOM" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold text-[11px] cursor-pointer transition">⭐ Özel Stratejilerim (2)</button>
+                        <button onclick="filterLeaderboard('SMC')" id="filterBtnSMC" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold text-[11px] cursor-pointer transition">🏦 SMC Sistemleri (3)</button>
+                    </div>
                 </div>
 
                 <div class="overflow-x-auto">

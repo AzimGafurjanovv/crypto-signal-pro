@@ -77,37 +77,37 @@ class StrategyAlertService:
 
     async def check_and_notify_radars(self, config: Dict[str, Any]):
         timeframes = config.get("timeframes", ["1h"])
-        strategies = config.get("strategies", ["PDH_PDL", "SWING_HL"])
+        strategies = config.get("strategies", ["PDH_PDL", "SWING_HL", "CHART_PATTERNS"])
 
         for tf in timeframes:
             # 1. Strateji: PDH / PDL
             if "PDH_PDL" in strategies:
                 try:
-                    pdh_res = run_pdh_pdl_radar(timeframe=tf, limit_coins=30)
+                    pdh_res = await asyncio.to_thread(run_pdh_pdl_radar, timeframe=tf, limit_coins=30)
                     if pdh_res.get("status") == "success":
-                        self._process_stage_alerts(pdh_res.get("stages", {}), "PDH_PDL", tf)
+                        await asyncio.to_thread(self._process_stage_alerts, pdh_res.get("stages", {}), "PDH_PDL", tf)
                 except Exception as e:
                     print(f"⚠️ PDH/PDL Radar check error: {e}")
 
             # 2. Strateji: Swing High / Low
             if "SWING_HL" in strategies:
                 try:
-                    swing_res = run_swing_radar(timeframe=tf, limit_coins=30, swing_lookback=3)
+                    swing_res = await asyncio.to_thread(run_swing_radar, timeframe=tf, limit_coins=30, swing_lookback=3)
                     if swing_res.get("status") == "success":
-                        self._process_stage_alerts(swing_res.get("stages", {}), "SWING_HL", tf)
+                        await asyncio.to_thread(self._process_stage_alerts, swing_res.get("stages", {}), "SWING_HL", tf)
                 except Exception as e:
                     print(f"⚠️ Swing Radar check error: {e}")
 
             # 3. Strateji: Formasyon Radarı (Trendline, Üçgen, S/R Flip, İkili Dip)
-            if "CHART_PATTERNS" in strategies or True:
+            if "CHART_PATTERNS" in strategies:
                 try:
-                    pat_res = run_pattern_radar(timeframe=tf, limit_coins=30)
+                    pat_res = await asyncio.to_thread(run_pattern_radar, timeframe=tf, limit_coins=30)
                     if pat_res.get("status") == "success":
-                        self._process_stage_alerts(pat_res.get("stages", {}), "CHART_PATTERNS", tf)
+                        await asyncio.to_thread(self._process_stage_alerts, pat_res.get("stages", {}), "CHART_PATTERNS", tf)
                 except Exception as e:
                     print(f"⚠️ Pattern Radar check error: {e}")
 
-        self._cleanup_old_history()
+        await asyncio.to_thread(self._cleanup_old_history)
 
     def _get_setup_identifier(self, coin: Dict[str, Any], strat_type: str, tf: str) -> str:
         """

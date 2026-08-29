@@ -203,19 +203,19 @@ async def serve_my_strategy():
 @app.get("/api/pdh-pdl-radar")
 async def get_pdh_pdl_radar(timeframe: str = Query("1h"), limit_coins: int = Query(50)):
     """Kullanıcının 1. Özel Stratejisi (PDH / PDL Günlük Likidite Breakout-Retest) canlı taraması."""
-    report = run_pdh_pdl_radar(timeframe=timeframe, limit_coins=limit_coins)
+    report = await asyncio.to_thread(run_pdh_pdl_radar, timeframe=timeframe, limit_coins=limit_coins)
     return sanitize_json(report)
 
 @app.get("/api/swing-radar")
 async def get_swing_radar(timeframe: str = Query("1h"), limit_coins: int = Query(50), swing_lookback: int = Query(3)):
     """Kullanıcının 2. Özel Stratejisi (Yapısal Swing High/Low Breakout-Retest) canlı taraması."""
-    report = run_swing_radar(timeframe=timeframe, limit_coins=limit_coins, swing_lookback=swing_lookback)
+    report = await asyncio.to_thread(run_swing_radar, timeframe=timeframe, limit_coins=limit_coins, swing_lookback=swing_lookback)
     return sanitize_json(report)
 
 @app.get("/api/pattern-radar")
 async def get_pattern_radar(timeframe: str = Query("1h"), limit_coins: int = Query(50)):
     """Kullanıcının 3. Özel Stratejisi (Klasik ve Modern Formasyon Radarı - Trendline, Üçgen, S/R Flip, İkili Dip)."""
-    report = run_pattern_radar(timeframe=timeframe, limit_coins=limit_coins)
+    report = await asyncio.to_thread(run_pattern_radar, timeframe=timeframe, limit_coins=limit_coins)
     return sanitize_json(report)
 
 @app.get("/api/pairs")

@@ -268,13 +268,21 @@ function renderColumnList(containerId, list, type) {
         const isLong = c.direction === 'LONG';
         const levelLabel = activeStrategy === 'PDH_PDL'
             ? (isLong ? 'PDH' : 'PDL')
-            : (isLong ? 'Swing High' : 'Swing Low');
+            : (activeStrategy === 'SWING_HL' ? (isLong ? 'Swing High' : 'Swing Low') : (c.strategy_name || 'Formasyon'));
 
         const levelPrice = c.breakout_level || (isLong ? (c.pdh || c.swing_level) : (c.pdl || c.swing_level));
 
         const dirBadge = isLong 
-            ? `<span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30 text-[10px] font-mono">🟢 LONG (${levelLabel})</span>`
-            : `<span class="px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 font-bold border border-rose-500/30 text-[10px] font-mono">🔴 SHORT (${levelLabel})</span>`;
+            ? `<span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30 text-[10px] font-mono">🟢 LONG</span>`
+            : `<span class="px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 font-bold border border-rose-500/30 text-[10px] font-mono">🔴 SHORT</span>`;
+
+        const tfBadge = c.timeframe_badge 
+            ? `<span class="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30 text-[9px] font-mono">${c.timeframe_badge}</span>`
+            : `<span class="px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 font-bold border border-gray-700 text-[9px] font-mono">${(c.timeframe || currentRadarTimeframe).toUpperCase()}</span>`;
+
+        const qualityBadge = c.quality_score 
+            ? `<span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 text-[9px] font-mono">%${c.quality_score} Kalite</span>`
+            : '';
 
         const card = document.createElement('div');
         card.className = `glass-card p-4 rounded-2xl border transition cursor-pointer group hover:scale-[1.01] ${
@@ -288,6 +296,8 @@ function renderColumnList(containerId, list, type) {
                     <div class="flex items-center gap-2">
                         <span class="font-extrabold text-sm text-white">${c.symbol}</span>
                         ${dirBadge}
+                        ${tfBadge}
+                        ${qualityBadge}
                     </div>
                     <span class="text-xs font-bold text-emerald-400 font-mono flex items-center gap-1">
                         <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>
@@ -662,6 +672,27 @@ async function loadAndRenderRadarChart(coin) {
             if (markers.length > 0) {
                 markers.sort((a, b) => a.time - b.time);
                 candleSeries.setMarkers(markers);
+            }
+
+            // 6. ÖZEL FORMASYON TRENDLİNE & BOYUN ÇİZGİLERİ (Trendlines Çizimi)
+            if (coin.lines && Array.isArray(coin.lines)) {
+                coin.lines.forEach(lineDef => {
+                    if (lineDef.points && lineDef.points.length > 0) {
+                        const patLine = radarChartInstance.addLineSeries({
+                            color: lineDef.color || '#fbbf24',
+                            lineWidth: 2,
+                            lineStyle: 0,
+                            priceLineVisible: false,
+                            lastValueVisible: false,
+                            crosshairMarkerVisible: false,
+                        });
+                        const validPoints = lineDef.points.map(p => ({
+                            time: p.time,
+                            value: p.value
+                        })).sort((a, b) => a.time - b.time);
+                        patLine.setData(validPoints);
+                    }
+                });
             }
 
             radarChartInstance.timeScale().fitContent();

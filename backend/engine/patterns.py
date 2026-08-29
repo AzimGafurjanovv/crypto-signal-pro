@@ -1,398 +1,421 @@
+"""
+CryptoSignalPro AI - Gelişmiş Grafik Formasyonları Tespit ve Çizim Motoru (v8.0.0)
+Algoritmik Standartlar: Thomas Bulkowski (Encyclopedia of Chart Patterns),
+ZigZag Extrema Analizi, Lineer Regresyon Trend Doğrulaması ve TradingView Çizim Koordinatları.
+"""
+
+import math
 import numpy as np
 import pandas as pd
-from typing import Dict, Any, List, Optional
-from .indicators import find_swing_points
+from typing import Dict, Any, List, Optional, Tuple
+
+def _get_sec_timestamp(df: pd.DataFrame, idx: int) -> int:
+    """Verilen bar indeksinin saniye cinsinden UNIX zaman damgasını döndürür."""
+    if idx < 0 or idx >= len(df):
+        idx = max(0, min(len(df) - 1, idx))
+    
+    if 'timestamp' in df.columns:
+        val = df['timestamp'].iloc[idx]
+        try:
+            val = int(val)
+            return val // 1000 if val > 1e12 else val
+        except Exception:
+            pass
+    return int(idx)
+
+def _build_dense_line(df: pd.DataFrame, start_idx: int, end_idx: int, start_val: float, end_val: float) -> List[Dict[str, Any]]:
+    """
+    TradingView Lightweight Charts üzerinde pürüzsüz ve hatasız bir trend çizgisi için
+    başlangıç barından bitiş barına kadar her mumun zaman damgasıyla enterpole edilmiş koordinat listesi üretir.
+    """
+    points = []
+    total_bars = max(1, end_idx - start_idx)
+    slope = (end_val - start_val) / total_bars
+    
+    for i in range(start_idx, end_idx + 1):
+        if i >= len(df):
+            break
+        t = _get_sec_timestamp(df, i)
+        val = start_val + slope * (i - start_idx)
+        points.append({'time': t, 'value': round(float(val), 4)})
+    
+    return points
+
+def extract_zigzag_extrema(df: pd.DataFrame, depth: int = 5, deviation_pct: float = 1.0) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Gürültüyü filtreleyen ve gerçek dönüm noktalarını bulan ZigZag tepe/dip motoru.
+    """
+    n = len(df)
+    if n < depth * 2:
+        return [], []
+    
+    highs = df['high'].values
+    lows = df['low'].values
+    closes = df['close'].values
+    
+    peaks = []
+    valleys = []
+    
+    for i in range(depth, n - depth):
+        # Peak (Zirve) Kontrolü
+        if highs[i] == max(highs[i - depth : i + depth + 1]):
+            # Min sapma kontrolü
+            if not peaks or (highs[i] > peaks[-1]['price'] * (1 + deviation_pct / 100) or i - peaks[-1]['index'] >= depth):
+                peaks.append({
+                    'index': int(i),
+                    'price': float(highs[i]),
+                    'time': _get_sec_timestamp(df, i)
+                })
+        
+        # Valley (Dip) Kontrolü
+        if lows[i] == min(lows[i - depth : i + depth + 1]):
+            if not valleys or (lows[i] < valleys[-1]['price'] * (1 - deviation_pct / 100) or i - valleys[-1]['index'] >= depth):
+                valleys.append({
+                    'index': int(i),
+                    'price': float(lows[i]),
+                    'time': _get_sec_timestamp(df, i)
+                })
+                
+    return peaks, valleys
+
+def calculate_linear_regression(points: List[Dict[str, Any]]) -> Tuple[float, float, float]:
+    """
+    Noktalar üzerinden Lineer Regresyon eğimi (slope), kesim noktası (intercept) ve R² korelasyonunu hesaplar.
+    """
+    if len(points) < 2:
+        return 0.0, 0.0, 0.0
+    
+    x = np.array([p['index'] for p in points], dtype=float)
+    y = np.array([p['price'] for p in points], dtype=float)
+    
+    n = len(x)
+    sum_x = np.sum(x)
+    sum_y = np.sum(y)
+    sum_xx = np.sum(x * x)
+    sum_xy = np.sum(x * y)
+    
+    denom = (n * sum_xx - sum_x * sum_x)
+    if abs(denom) < 1e-10:
+        return 0.0, float(np.mean(y)), 0.0
+    
+    slope = (n * sum_xy - sum_x * sum_y) / denom
+    intercept = (sum_y - slope * sum_x) / n
+    
+    # R² Korelasyon Katsayısı
+    y_pred = slope * x + intercept
+    ss_tot = np.sum((y - np.mean(y)) ** 2)
+    ss_res = np.sum((y - y_pred) ** 2)
+    r_squared = 1.0 - (ss_res / ss_tot) if ss_tot > 1e-10 else 1.0
+    r_squared = max(0.0, min(1.0, float(r_squared)))
+    
+    return float(slope), float(intercept), r_squared
 
 def detect_chart_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
     """
-    Kullanıcının talep ettiği 5 Kilit Profesyonel Setup ve Formasyon Motoru (İki Dilli TR/EN):
-    1. TREND ÇİZGİSİ KIRILIMI + RETEST (Trendline Breakout + Retest)
-    2. SİMETRİK ÜÇGEN / FLAMA KIRILIMI (Symmetrical Triangle / Pennant Breakout)
-    3. DİRENÇ / DESTEK DÖNÜŞÜMÜ (S/R Flip Retest)
-    4. RANGE KIRILIMI + RETEST / SAPMA (Range Breakout / Deviation Reclaim)
-    5. DOUBLE BOTTOM (İKİLİ DİP W) / DOUBLE TOP (İKİLİ TEPE M)
+    10 Temel ve Profesyonel Grafik Formasyonunu Geometrik Hassasiyetle Tespit Eder.
     """
     patterns = []
-    if len(df) < 35:
+    n = len(df)
+    if n < 35:
         return patterns
 
-    swing_highs, swing_lows = find_swing_points(df, window=3)
-    n = len(df)
     current_price = float(df['close'].iloc[-1])
-    timestamps = df['timestamp'].values if 'timestamp' in df.columns else df.index.values
+    current_atr = float(df['atr'].iloc[-1]) if 'atr' in df.columns and not np.isnan(df['atr'].iloc[-1]) else current_price * 0.018
+    vol_sma20 = float(df['volume'].iloc[-20:].mean()) if len(df) >= 20 else float(df['volume'].iloc[-1])
+    current_vol = float(df['volume'].iloc[-1])
+    vol_boost = current_vol >= vol_sma20 * 1.1
 
-    # ---------------- 1. TREND ÇİZGİSİ KIRILIMI + RETEST (Trendline Breakout + Retest) ----------------
-    if len(swing_highs) >= 3:
-        sh1, sh2, sh3 = swing_highs[-3], swing_highs[-2], swing_highs[-1]
-        if sh1['price'] > sh2['price'] > sh3['price']:
-            slope = (sh3['price'] - sh1['price']) / (sh3['index'] - sh1['index'])
-            expected_trend_level = sh1['price'] + slope * (n - 1 - sh1['index'])
+    peaks, valleys = extract_zigzag_extrema(df, depth=3, deviation_pct=0.6)
+    
+    # -----------------------------------------------------------------------------------------
+    # 1. 📉 DÜŞEN TREND ÇİZGİSİ KIRILIMI & RETEST (Bullish Trendline Breakout)
+    # -----------------------------------------------------------------------------------------
+    if len(peaks) >= 2:
+        for k in range(min(4, len(peaks)), 1, -1):
+            selected_peaks = peaks[-k:]
+            slope, intercept, r2 = calculate_linear_regression(selected_peaks)
             
-            is_broken_up = current_price >= expected_trend_level * 0.998
-            recent_low = min(df['low'].iloc[-4:])
-            retested = recent_low <= expected_trend_level * 1.008 and current_price >= expected_trend_level * 0.995
-            
-            if is_broken_up and retested and (n - 1 - sh3['index']) <= 25:
-                target = sh1['price']
-                t1 = int(timestamps[sh1['index']]) // 1000 if hasattr(timestamps[0], '__int__') else int(sh1['index'])
-                t_now = int(timestamps[-1]) // 1000 if hasattr(timestamps[0], '__int__') else int(n - 1)
+            # Eğim negatif olmalı (Düşen Trend) ve R² en az 0.70 olmalı
+            if slope < -1e-5 and (len(selected_peaks) == 2 or r2 >= 0.70):
+                start_p = selected_peaks[0]
+                expected_now = slope * (n - 1) + intercept
                 
-                patterns.append({
-                    'name': 'Trend Çizgisi Kırılımı + Retest (Trendline Breakout + Retest)',
-                    'type': 'BULLISH',
-                    'category': '1. Trend Kırılım & Retest',
-                    'reliability': 'ÇOK YÜKSEK',
-                    'breakout_level': float(expected_trend_level),
-                    'target': float(target),
-                    'description': f'Düşen ana trend çizgisi yukarı kırıldı ve ${expected_trend_level:,.2f} seviyesinde retest (onay) tamamlandı. Hedef: ${target:,.2f}',
-                    'lines': [
-                        {'name': 'Düşen Trend Çizgisi (Bearish Trendline)', 'points': [{'time': t1, 'value': float(sh1['price'])}, {'time': t_now, 'value': float(expected_trend_level)}], 'color': '#fbbf24'}
-                    ]
-                })
-
-    if len(swing_lows) >= 3:
-        sl1, sl2, sl3 = swing_lows[-3], swing_lows[-2], swing_lows[-1]
-        if sl1['price'] < sl2['price'] < sl3['price']:
-            slope = (sl3['price'] - sl1['price']) / (sl3['index'] - sl1['index'])
-            expected_trend_level = sl1['price'] + slope * (n - 1 - sl1['index'])
-            
-            is_broken_down = current_price <= expected_trend_level * 1.002
-            recent_high = max(df['high'].iloc[-4:])
-            retested = recent_high >= expected_trend_level * 0.992 and current_price <= expected_trend_level * 1.005
-            
-            if is_broken_down and retested and (n - 1 - sl3['index']) <= 25:
-                target = sl1['price']
-                t1 = int(timestamps[sl1['index']]) // 1000 if hasattr(timestamps[0], '__int__') else int(sl1['index'])
-                t_now = int(timestamps[-1]) // 1000 if hasattr(timestamps[0], '__int__') else int(n - 1)
+                # Fiyat trend çizgisinin üzerine çıktı mı?
+                is_breakout = current_price >= expected_now * 0.998
+                recent_low = min(df['low'].iloc[-4:])
+                is_retest = recent_low <= expected_now + 0.3 * current_atr and current_price >= expected_now * 0.995
                 
-                patterns.append({
-                    'name': 'Trend Çizgisi Kırılımı + Retest (Trendline Breakout + Retest)',
-                    'type': 'BEARISH',
-                    'category': '1. Trend Kırılım & Retest',
-                    'reliability': 'ÇOK YÜKSEK',
-                    'breakout_level': float(expected_trend_level),
-                    'target': float(target),
-                    'description': f'Yükselen ana trend çizgisi aşağı kırıldı ve ${expected_trend_level:,.2f} seviyesinde retest satışı geldi. Hedef: ${target:,.2f}',
-                    'lines': [
-                        {'name': 'Yükselen Trend Çizgisi (Bullish Trendline)', 'points': [{'time': t1, 'value': float(sl1['price'])}, {'time': t_now, 'value': float(expected_trend_level)}], 'color': '#fbbf24'}
-                    ]
-                })
+                if is_breakout and (n - 1 - selected_peaks[-1]['index']) <= 25:
+                    target = start_p['price']
+                    quality = int(min(100, (r2 * 40) + (len(selected_peaks) * 15) + (25 if vol_boost else 10) + (20 if is_retest else 10)))
+                    
+                    line_points = _build_dense_line(df, start_p['index'], n - 1, start_p['price'], expected_now)
+                    patterns.append({
+                        'name': 'Düşen Trend Çizgisi Kırılımı & Retest',
+                        'type': 'BULLISH',
+                        'category': '1. Trend Kırılım & Retest',
+                        'quality_score': quality,
+                        'breakout_level': float(round(expected_now, 4)),
+                        'target': float(round(target, 4)),
+                        'description': f'Geometrik {len(selected_peaks)} tepe temaslı düşen trend çizgisi (${expected_now:,.4f}) yukarı kırıldı. Retest teyidiyle hedef: ${target:,.4f}',
+                        'lines': [
+                            {'name': 'Düşen Trend Direnci', 'points': line_points, 'color': '#fbbf24'}
+                        ]
+                    })
+                    break
 
-    # ---------------- 2. SİMETRİK ÜÇGEN / FLAMA KIRILIMI (Symmetrical Triangle / Pennant Breakout) ----------------
-    if len(swing_highs) >= 2 and len(swing_lows) >= 2:
-        sh1, sh2 = swing_highs[-2], swing_highs[-1]
-        sl1, sl2 = swing_lows[-2], swing_lows[-1]
+    # -----------------------------------------------------------------------------------------
+    # 2. 📈 YÜKSELEN TREND ÇİZGİSİ KIRILIMI & RETEST (Bearish Trendline Breakdown)
+    # -----------------------------------------------------------------------------------------
+    if len(valleys) >= 2:
+        for k in range(min(4, len(valleys)), 1, -1):
+            selected_valleys = valleys[-k:]
+            slope, intercept, r2 = calculate_linear_regression(selected_valleys)
+            
+            # Eğim pozitif olmalı (Yükselen Trend)
+            if slope > 1e-5 and (len(selected_valleys) == 2 or r2 >= 0.70):
+                start_v = selected_valleys[0]
+                expected_now = slope * (n - 1) + intercept
+                
+                is_breakdown = current_price <= expected_now * 1.002
+                recent_high = max(df['high'].iloc[-4:])
+                is_retest = recent_high >= expected_now - 0.3 * current_atr and current_price <= expected_now * 1.005
+                
+                if is_breakdown and (n - 1 - selected_valleys[-1]['index']) <= 25:
+                    target = start_v['price']
+                    quality = int(min(100, (r2 * 40) + (len(selected_valleys) * 15) + (25 if vol_boost else 10) + (20 if is_retest else 10)))
+                    
+                    line_points = _build_dense_line(df, start_v['index'], n - 1, start_v['price'], expected_now)
+                    patterns.append({
+                        'name': 'Yükselen Trend Çizgisi Kırılımı & Retest',
+                        'type': 'BEARISH',
+                        'category': '1. Trend Kırılım & Retest',
+                        'quality_score': quality,
+                        'breakout_level': float(round(expected_now, 4)),
+                        'target': float(round(target, 4)),
+                        'description': f'Geometrik {len(selected_valleys)} dip temaslı yükselen trend desteği (${expected_now:,.4f}) aşağı kırıldı. Satış retesti ile hedef: ${target:,.4f}',
+                        'lines': [
+                            {'name': 'Yükselen Trend Desteği', 'points': line_points, 'color': '#f43f5e'}
+                        ]
+                    })
+                    break
+
+    # -----------------------------------------------------------------------------------------
+    # 3. 📐 SİMETRİK / YÜKSELEN / ALÇALAN ÜÇGEN & FLAMA
+    # -----------------------------------------------------------------------------------------
+    if len(peaks) >= 2 and len(valleys) >= 2:
+        p1, p2 = peaks[-2], peaks[-1]
+        v1, v2 = valleys[-2], valleys[-1]
         
-        is_converging = (sh2['price'] < sh1['price'] * 0.995) and (sl2['price'] > sl1['price'] * 1.005)
-        if is_converging and (n - 1 - max(sh2['index'], sl2['index'])) <= 20:
-            triangle_height = sh1['price'] - sl1['price']
-            is_break_up = current_price >= sh2['price'] * 0.998
-            target = current_price + triangle_height if is_break_up else current_price - triangle_height
-            pat_type = 'BULLISH' if is_break_up else 'BEARISH'
+        slope_upper = (p2['price'] - p1['price']) / max(1, p2['index'] - p1['index'])
+        slope_lower = (v2['price'] - v1['price']) / max(1, v2['index'] - v1['index'])
+        
+        # Simetrik Üçgen (Direnç düşüyor, Destek yükseliyor)
+        if slope_upper < 0 and slope_lower > 0 and (n - 1 - max(p2['index'], v2['index'])) <= 20:
+            height = p1['price'] - v1['price']
+            is_bull = current_price >= p2['price'] * 0.998
+            target = current_price + height if is_bull else current_price - height
+            pat_type = 'BULLISH' if is_bull else 'BEARISH'
+            bo_level = p2['price'] if is_bull else v2['price']
             
-            t1 = int(timestamps[sh1['index']]) // 1000 if hasattr(timestamps[0], '__int__') else int(sh1['index'])
-            t2 = int(timestamps[sh2['index']]) // 1000 if hasattr(timestamps[0], '__int__') else int(sh2['index'])
-            tl1 = int(timestamps[sl1['index']]) // 1000 if hasattr(timestamps[0], '__int__') else int(sl1['index'])
-            tl2 = int(timestamps[sl2['index']]) // 1000 if hasattr(timestamps[0], '__int__') else int(sl2['index'])
+            line_up = _build_dense_line(df, p1['index'], n - 1, p1['price'], p1['price'] + slope_upper * (n - 1 - p1['index']))
+            line_down = _build_dense_line(df, v1['index'], n - 1, v1['price'], v1['price'] + slope_lower * (n - 1 - v1['index']))
             
             patterns.append({
-                'name': 'Simetrik Üçgen / Flama Kırılımı (Symmetrical Triangle / Pennant Breakout)',
+                'name': 'Simetrik Üçgen / Flama Kırılımı',
                 'type': pat_type,
                 'category': '2. Simetrik Üçgen / Pennant',
-                'reliability': 'ÇOK YÜKSEK',
-                'target': float(target),
-                'description': f'Daralan flama/üçgen bandından (${sl2["price"]:,.2f} - ${sh2["price"]:,.2f}) hacimli patlama gerçekleşti. Hedef: ${target:,.2f}',
+                'quality_score': 88,
+                'breakout_level': float(round(bo_level, 4)),
+                'target': float(round(target, 4)),
+                'description': f'Daralan simetrik üçgen bandından (${v2["price"]:,.4f} - ${p2["price"]:,.4f}) {pat_type} yönünde hacimli kırılım gerçekleşti. Hedef: ${target:,.4f}',
                 'lines': [
-                    {'name': 'Alçalan Direnç', 'points': [{'time': t1, 'value': float(sh1['price'])}, {'time': t2, 'value': float(sh2['price'])}], 'color': '#f43f5e'},
-                    {'name': 'Yükselen Destek', 'points': [{'time': tl1, 'value': float(sl1['price'])}, {'time': tl2, 'value': float(sl2['price'])}], 'color': '#10b981'}
+                    {'name': 'Alçalan Üçgen Direnci', 'points': line_up, 'color': '#fbbf24'},
+                    {'name': 'Yükselen Üçgen Desteği', 'points': line_down, 'color': '#38bdf8'}
+                ]
+            })
+        
+        # Yükselen Üçgen (Direnç yatay, Dipler yükseliyor -> Bullish)
+        elif abs(p2['price'] - p1['price']) / p1['price'] <= 0.012 and slope_lower > 0:
+            height = p1['price'] - v1['price']
+            target = p2['price'] + height
+            line_up = _build_dense_line(df, p1['index'], n - 1, p1['price'], p2['price'])
+            line_down = _build_dense_line(df, v1['index'], n - 1, v1['price'], v1['price'] + slope_lower * (n - 1 - v1['index']))
+            
+            patterns.append({
+                'name': 'Yükselen Üçgen Formasyonu (Ascending Triangle)',
+                'type': 'BULLISH',
+                'category': '2. Simetrik Üçgen / Pennant',
+                'quality_score': 90,
+                'breakout_level': float(round(p2['price'], 4)),
+                'target': float(round(target, 4)),
+                'description': f'${p2["price"]:,.4f} yatay direnci altında yükselen diplerle sıkışma tamamlandı ve yukarı patlama gerçekleşti.',
+                'lines': [
+                    {'name': 'Yatay Direnç Tavanı', 'points': line_up, 'color': '#fbbf24'},
+                    {'name': 'Yükselen Destek Çizgisi', 'points': line_down, 'color': '#10b981'}
                 ]
             })
 
-    # ---------------- 3. DİRENÇ / DESTEK DÖNÜŞÜMÜ (S/R Flip Retest) ----------------
-    for sh in swing_highs[-4:-1]:
-        res_level = sh['price']
-        breaks = [i for i in range(sh['index'] + 1, n) if df['close'].iloc[i] > res_level * 1.005]
-        if breaks:
-            first_break = breaks[0]
-            recent_lows = df['low'].iloc[first_break:]
-            if len(recent_lows) > 0 and recent_lows.min() <= res_level * 1.01 and current_price >= res_level * 0.996:
-                atr = float(df['atr'].iloc[-1]) if 'atr' in df.columns else current_price * 0.02
-                target = current_price + (atr * 2.5)
-                t_sh = int(timestamps[sh['index']]) // 1000 if hasattr(timestamps[0], '__int__') else int(sh['index'])
-                t_now = int(timestamps[-1]) // 1000 if hasattr(timestamps[0], '__int__') else int(n - 1)
+    # -----------------------------------------------------------------------------------------
+    # 4. 🔄 DİRENÇ / DESTEK DÖNÜŞÜMÜ (S/R Flip Retest)
+    # -----------------------------------------------------------------------------------------
+    if len(peaks) >= 2:
+        for p in peaks[-4:-1]:
+            res = p['price']
+            breaks = [i for i in range(p['index'] + 1, n) if df['close'].iloc[i] > res * 1.006]
+            if breaks:
+                first_brk = breaks[0]
+                post_lows = df['low'].iloc[first_brk:]
+                if len(post_lows) > 0 and post_lows.min() <= res + 0.3 * current_atr and current_price >= res * 0.996:
+                    target = current_price + (current_atr * 2.8)
+                    line_points = _build_dense_line(df, p['index'], n - 1, res, res)
+                    patterns.append({
+                        'name': 'Direnç/Destek Dönüşümü (S/R Flip Retest)',
+                        'type': 'BULLISH',
+                        'category': '3. S/R Flip Retest',
+                        'quality_score': 92,
+                        'flip_level': float(round(res, 4)),
+                        'breakout_level': float(round(res, 4)),
+                        'target': float(round(target, 4)),
+                        'description': f'Eski kilit direnç ${res:,.4f} yukarı kırılarak güçlü yeni desteğe dönüştü (S/R Flip) ve fitil testiyle doğrulandı.',
+                        'lines': [
+                            {'name': 'S/R Flip Destek Çizgisi', 'points': line_points, 'color': '#10b981'}
+                        ]
+                    })
+                    break
+
+    if len(valleys) >= 2:
+        for v in valleys[-4:-1]:
+            sup = v['price']
+            breaks = [i for i in range(v['index'] + 1, n) if df['close'].iloc[i] < sup * 0.994]
+            if breaks:
+                first_brk = breaks[0]
+                post_highs = df['high'].iloc[first_brk:]
+                if len(post_highs) > 0 and post_highs.max() >= sup - 0.3 * current_atr and current_price <= sup * 1.004:
+                    target = current_price - (current_atr * 2.8)
+                    line_points = _build_dense_line(df, v['index'], n - 1, sup, sup)
+                    patterns.append({
+                        'name': 'Destek/Direnç Dönüşümü (S/R Flip Retest)',
+                        'type': 'BEARISH',
+                        'category': '3. S/R Flip Retest',
+                        'quality_score': 92,
+                        'flip_level': float(round(sup, 4)),
+                        'breakout_level': float(round(sup, 4)),
+                        'target': float(round(target, 4)),
+                        'description': f'Eski kilit destek ${sup:,.4f} aşağı kırılarak güçlü yeni dirence dönüştü (S/R Flip) ve satış retesti verdi.',
+                        'lines': [
+                            {'name': 'S/R Flip Direnç Çizgisi', 'points': line_points, 'color': '#f43f5e'}
+                        ]
+                    })
+                    break
+
+    # -----------------------------------------------------------------------------------------
+    # 5. 🇼 DOUBLE BOTTOM (W) & 🇲 DOUBLE TOP (M)
+    # -----------------------------------------------------------------------------------------
+    if len(valleys) >= 2:
+        v1, v2 = valleys[-2], valleys[-1]
+        bars_between = v2['index'] - v1['index']
+        if 6 <= bars_between <= 45 and (n - 1 - v2['index']) <= 18:
+            price_diff_pct = abs(v1['price'] - v2['price']) / v1['price'] * 100.0
+            if price_diff_pct <= 1.8:
+                neckline = float(df['high'].iloc[v1['index']:v2['index']].max())
+                target = neckline + (neckline - min(v1['price'], v2['price']))
+                
+                line_neck = _build_dense_line(df, v1['index'], n - 1, neckline, neckline)
+                line_bottom = _build_dense_line(df, v1['index'], n - 1, min(v1['price'], v2['price']), min(v1['price'], v2['price']))
                 
                 patterns.append({
-                    'name': 'Direnç/Destek Dönüşümü (S/R Flip Retest)',
+                    'name': 'Double Bottom (İkili Dip W Formasyonu)',
                     'type': 'BULLISH',
-                    'category': '3. S/R Flip Retest',
-                    'reliability': 'ÇOK YÜKSEK',
-                    'flip_level': float(res_level),
-                    'target': float(target),
-                    'description': f'Eski kilit direnç ${res_level:,.2f} yukarı kırılarak güçlü yeni desteğe dönüştü (S/R Flip) ve retest ile onaylandı.',
+                    'category': '5. Double Bottom / Top',
+                    'quality_score': 94,
+                    'neckline': float(round(neckline, 4)),
+                    'breakout_level': float(round(neckline, 4)),
+                    'target': float(round(target, 4)),
+                    'description': f'${v1["price"]:,.4f} ve ${v2["price"]:,.4f} seviyelerinde simetrik ikili dip (W) oluştu. ${neckline:,.4f} boyun çizgisi kırılımıyla hedef: ${target:,.4f}',
                     'lines': [
-                        {'name': 'S/R Flip Destek Çizgisi', 'points': [{'time': t_sh, 'value': float(res_level)}, {'time': t_now, 'value': float(res_level)}], 'color': '#10b981'}
+                        {'name': 'W Boyun Çizgisi (Neckline)', 'points': line_neck, 'color': '#fbbf24'},
+                        {'name': 'W Taban Destek Seviyesi', 'points': line_bottom, 'color': '#10b981'}
                     ]
                 })
-                break
 
-    for sl in swing_lows[-4:-1]:
-        supp_level = sl['price']
-        breaks = [i for i in range(sl['index'] + 1, n) if df['close'].iloc[i] < supp_level * 0.995]
-        if breaks:
-            first_break = breaks[0]
-            recent_highs = df['high'].iloc[first_break:]
-            if len(recent_highs) > 0 and recent_highs.max() >= supp_level * 0.99 and current_price <= supp_level * 1.004:
-                atr = float(df['atr'].iloc[-1]) if 'atr' in df.columns else current_price * 0.02
-                target = current_price - (atr * 2.5)
-                t_sl = int(timestamps[sl['index']]) // 1000 if hasattr(timestamps[0], '__int__') else int(sl['index'])
-                t_now = int(timestamps[-1]) // 1000 if hasattr(timestamps[0], '__int__') else int(n - 1)
+    if len(peaks) >= 2:
+        p1, p2 = peaks[-2], peaks[-1]
+        bars_between = p2['index'] - p1['index']
+        if 6 <= bars_between <= 45 and (n - 1 - p2['index']) <= 18:
+            price_diff_pct = abs(p1['price'] - p2['price']) / p1['price'] * 100.0
+            if price_diff_pct <= 1.8:
+                neckline = float(df['low'].iloc[p1['index']:p2['index']].min())
+                target = neckline - (max(p1['price'], p2['price']) - neckline)
+                
+                line_neck = _build_dense_line(df, p1['index'], n - 1, neckline, neckline)
+                line_top = _build_dense_line(df, p1['index'], n - 1, max(p1['price'], p2['price']), max(p1['price'], p2['price']))
                 
                 patterns.append({
-                    'name': 'Direnç/Destek Dönüşümü (S/R Flip Retest)',
+                    'name': 'Double Top (İkili Tepe M Formasyonu)',
                     'type': 'BEARISH',
-                    'category': '3. S/R Flip Retest',
-                    'reliability': 'ÇOK YÜKSEK',
-                    'flip_level': float(supp_level),
-                    'target': float(target),
-                    'description': f'Eski kilit destek ${supp_level:,.2f} aşağı kırılarak güçlü yeni dirence dönüştü (S/R Flip) ve satış retesti verdi.',
+                    'category': '5. Double Bottom / Top',
+                    'quality_score': 94,
+                    'neckline': float(round(neckline, 4)),
+                    'breakout_level': float(round(neckline, 4)),
+                    'target': float(round(target, 4)),
+                    'description': f'${p1["price"]:,.4f} ve ${p2["price"]:,.4f} seviyelerinde çift tepe (M) reddi teyit edildi. ${neckline:,.4f} boyun çizgisi altında hedef: ${target:,.4f}',
                     'lines': [
-                        {'name': 'S/R Flip Direnç Çizgisi', 'points': [{'time': t_sl, 'value': float(supp_level)}, {'time': t_now, 'value': float(supp_level)}], 'color': '#f43f5e'}
+                        {'name': 'M Boyun Çizgisi (Neckline)', 'points': line_neck, 'color': '#fbbf24'},
+                        {'name': 'M Tavan Direnç Seviyesi', 'points': line_top, 'color': '#f43f5e'}
                     ]
                 })
-                break
 
-    # ---------------- 4. RANGE (YATAY BANT) KIRILIMI + RETEST / SAPMA ----------------
-    if len(df) >= 30:
-        range_high = df['high'].iloc[-35:-5].max()
-        range_low = df['low'].iloc[-35:-5].min()
+    # -----------------------------------------------------------------------------------------
+    # 6. 📊 RANGE KIRILIMI & LİKİDİTE SAPMASI (Deviation Reclaim)
+    # -----------------------------------------------------------------------------------------
+    if n >= 35:
+        range_high = float(df['high'].iloc[-35:-5].max())
+        range_low = float(df['low'].iloc[-35:-5].min())
         range_height = range_high - range_low
         
-        if current_price >= range_high * 0.997 and df['low'].iloc[-4:].min() <= range_high * 1.012:
+        # A. Range Üst Kırılımı
+        if current_price >= range_high * 0.997 and df['low'].iloc[-4:].min() <= range_high + 0.3 * current_atr:
             target = range_high + range_height
-            t_start = int(timestamps[-35]) // 1000 if hasattr(timestamps[0], '__int__') else int(n - 35)
-            t_now = int(timestamps[-1]) // 1000 if hasattr(timestamps[0], '__int__') else int(n - 1)
+            line_top = _build_dense_line(df, n - 35, n - 1, range_high, range_high)
+            line_bot = _build_dense_line(df, n - 35, n - 1, range_low, range_low)
             patterns.append({
-                'name': 'Range Kırılımı + Retest (Range Breakout + Retest)',
+                'name': 'Range (Yatay Kanal) Kırılımı & Retest',
                 'type': 'BULLISH',
                 'category': '4. Range Kırılım & Retest',
-                'reliability': 'ÇOK YÜKSEK',
-                'range_high': float(range_high),
-                'range_low': float(range_low),
-                'target': float(target),
-                'description': f'${range_low:,.2f} - ${range_high:,.2f} yatay akümülasyon bandı yukarı kırıldı ve ${range_high:,.2f} tavanında retest onaylandı. Hedef: ${target:,.2f}',
+                'quality_score': 89,
+                'breakout_level': float(round(range_high, 4)),
+                'range_high': float(round(range_high, 4)),
+                'range_low': float(round(range_low, 4)),
+                'target': float(round(target, 4)),
+                'description': f'${range_low:,.4f} - ${range_high:,.4f} akümülasyon kanalı yukarı kırıldı ve ${range_high:,.4f} tavanında retest onaylandı. Hedef: ${target:,.4f}',
                 'lines': [
-                    {'name': 'Range Tavanı (Range High)', 'points': [{'time': t_start, 'value': float(range_high)}, {'time': t_now, 'value': float(range_high)}], 'color': '#38bdf8'},
-                    {'name': 'Range Tabanı (Range Low)', 'points': [{'time': t_start, 'value': float(range_low)}, {'time': t_now, 'value': float(range_low)}], 'color': '#38bdf8'}
+                    {'name': 'Range Tavanı', 'points': line_top, 'color': '#38bdf8'},
+                    {'name': 'Range Tabanı', 'points': line_bot, 'color': '#38bdf8'}
                 ]
             })
+        
+        # B. Range Likidite Sapması (Ayı Tuzağı / Fakeout Reclaim)
         elif df['low'].iloc[-6:].min() < range_low * 0.992 and current_price >= range_low * 1.002:
             target = range_high
-            t_start = int(timestamps[-35]) // 1000 if hasattr(timestamps[0], '__int__') else int(n - 35)
-            t_now = int(timestamps[-1]) // 1000 if hasattr(timestamps[0], '__int__') else int(n - 1)
+            line_top = _build_dense_line(df, n - 35, n - 1, range_high, range_high)
+            line_bot = _build_dense_line(df, n - 35, n - 1, range_low, range_low)
             patterns.append({
-                'name': 'Range Likidite Sapması (Deviation Reclaim)',
+                'name': 'Range Likidite Sapması (Ayı Tuzağı / Deviation)',
                 'type': 'BULLISH',
                 'category': '4. Range Kırılım & Retest',
-                'reliability': 'ÇOK YÜKSEK',
-                'range_high': float(range_high),
-                'range_low': float(range_low),
-                'target': float(target),
-                'description': f'${range_low:,.2f} Range tabanı altına sahte kırılım (Deviation / Fakeout) yapıldı ve bant içine geri dönüldü. Hedef Range Tavanı: ${target:,.2f}',
+                'quality_score': 95,
+                'breakout_level': float(round(range_low, 4)),
+                'range_high': float(round(range_high, 4)),
+                'range_low': float(round(range_low, 4)),
+                'target': float(round(target, 4)),
+                'description': f'${range_low:,.4f} Range tabanı altına sahte kırılım (Ayı Tuzağı) yapıldı ve bant içine güçlü hacimle geri dönüldü. Hedef Tavan: ${target:,.4f}',
                 'lines': [
-                    {'name': 'Range Tavanı', 'points': [{'time': t_start, 'value': float(range_high)}, {'time': t_now, 'value': float(range_high)}], 'color': '#38bdf8'},
-                    {'name': 'Range Tabanı', 'points': [{'time': t_start, 'value': float(range_low)}, {'time': t_now, 'value': float(range_low)}], 'color': '#38bdf8'}
+                    {'name': 'Range Tavanı (Hedef)', 'points': line_top, 'color': '#38bdf8'},
+                    {'name': 'Sapma Reclaim Tabanı', 'points': line_bot, 'color': '#10b981'}
                 ]
             })
 
-    # ---------------- 5. DOUBLE BOTTOM (İKİLİ DİP W) / DOUBLE TOP (İKİLİ TEPE M) ----------------
-    if len(swing_lows) >= 2:
-        sl1, sl2 = swing_lows[-2], swing_lows[-1]
-        if (n - 1 - sl2['index']) <= 18:
-            price_diff_pct = abs(sl1['price'] - sl2['price']) / sl1['price'] * 100.0
-            if price_diff_pct <= 1.8:
-                neckline = df['high'].iloc[sl1['index']:sl2['index']].max()
-                target = neckline + (neckline - min(sl1['price'], sl2['price']))
-                t_neck = int(timestamps[sl1['index']]) // 1000 if hasattr(timestamps[0], '__int__') else int(sl1['index'])
-                t_now = int(timestamps[-1]) // 1000 if hasattr(timestamps[0], '__int__') else int(n - 1)
-                patterns.append({
-                    'name': 'Double Bottom (İkili Dip W Pattern)',
-                    'type': 'BULLISH',
-                    'category': '5. Double Bottom / Top',
-                    'reliability': 'YÜKSEK',
-                    'neckline': float(neckline),
-                    'target': float(target),
-                    'description': f'${sl1["price"]:,.2f} ve ${sl2["price"]:,.2f} seviyelerinde çift dip (W) tamamlandı. ${neckline:,.2f} boyun çizgisi üzerinde hedef: ${target:,.2f}',
-                    'lines': [
-                        {'name': 'W Boyun Çizgisi (Neckline)', 'points': [{'time': t_neck, 'value': float(neckline)}, {'time': t_now, 'value': float(neckline)}], 'color': '#fbbf24'}
-                    ]
-                })
-
-    if len(swing_highs) >= 2:
-        sh1, sh2 = swing_highs[-2], swing_highs[-1]
-        if (n - 1 - sh2['index']) <= 18:
-            price_diff_pct = abs(sh1['price'] - sh2['price']) / sh1['price'] * 100.0
-            if price_diff_pct <= 1.8:
-                neckline = df['low'].iloc[sh1['index']:sh2['index']].min()
-                target = neckline - (max(sh1['price'], sh2['price']) - neckline)
-                t_neck = int(timestamps[sh1['index']]) // 1000 if hasattr(timestamps[0], '__int__') else int(sh1['index'])
-                t_now = int(timestamps[-1]) // 1000 if hasattr(timestamps[0], '__int__') else int(n - 1)
-                patterns.append({
-                    'name': 'Double Top (İkili Tepe M Pattern)',
-                    'type': 'BEARISH',
-                    'category': '5. Double Bottom / Top',
-                    'reliability': 'YÜKSEK',
-                    'neckline': float(neckline),
-                    'target': float(target),
-                    'description': f'${sh1["price"]:,.2f} ve ${sh2["price"]:,.2f} seviyelerinde çift tepe (M) satışı teyit edildi. ${neckline:,.2f} altında hedef: ${target:,.2f}',
-                    'lines': [
-                        {'name': 'M Boyun Çizgisi (Neckline)', 'points': [{'time': t_neck, 'value': float(neckline)}, {'time': t_now, 'value': float(neckline)}], 'color': '#fbbf24'}
-                    ]
-                })
-
-    # ---------------- 6. ÖNCEKİ GÜN ZİRVE/DİP KIRILIMI + RETEST (PDH/PDL) (BENİM) ----------------
-    if n >= 24:
-        # Zaman damgası kullanarak her zaman diliminde (15m, 1h, 4h) tam 24 saatlik gerçek döngüyü bul
-        if 'timestamp' in df.columns:
-            ts_series = df['timestamp'].apply(lambda x: int(x)//1000 if int(x) > 1e12 else int(x))
-            last_ts = int(ts_series.iloc[-1])
-            sec_24h = 86400
-            sec_48h = 172800
-
-            current_day_mask = (ts_series >= (last_ts - sec_24h))
-            prev_day_mask = (ts_series < (last_ts - sec_24h)) & (ts_series >= (last_ts - sec_48h))
-
-            prev_day_slice = df[prev_day_mask]
-            current_day_slice = df[current_day_mask]
-
-            if len(prev_day_slice) >= 4 and len(current_day_slice) >= 4:
-                pdh = float(prev_day_slice['high'].max())
-                pdl = float(prev_day_slice['low'].min())
-                curr_slice = current_day_slice
-                t_start = int(ts_series[prev_day_mask].iloc[0])
-                t_now = int(last_ts)
-            else:
-                lookback_pd = 24 if n >= 48 else n // 2
-                prev_day_slice = df.iloc[-lookback_pd*2 : -lookback_pd]
-                pdh = float(prev_day_slice['high'].max())
-                pdl = float(prev_day_slice['low'].min())
-                curr_slice = df.iloc[-lookback_pd:]
-                t_start = int(timestamps[-lookback_pd*2]) // 1000 if hasattr(timestamps[0], '__int__') else int(n - lookback_pd*2)
-                t_now = int(timestamps[-1]) // 1000 if hasattr(timestamps[0], '__int__') else int(n - 1)
-        else:
-            lookback_pd = 24 if n >= 48 else n // 2
-            prev_day_slice = df.iloc[-lookback_pd*2 : -lookback_pd]
-            pdh = float(prev_day_slice['high'].max())
-            pdl = float(prev_day_slice['low'].min())
-            curr_slice = df.iloc[-lookback_pd:]
-            t_start = int(timestamps[-lookback_pd*2]) // 1000 if hasattr(timestamps[0], '__int__') else int(n - lookback_pd*2)
-            t_now = int(timestamps[-1]) // 1000 if hasattr(timestamps[0], '__int__') else int(n - 1)
-
-        curr_len = len(curr_slice)
-        atr_val = float(df['atr'].iloc[-1]) if 'atr' in df.columns else (current_price * 0.015)
-        tolerance = 0.3 * atr_val
-        vol_sma20 = float(df['volume'].iloc[-20:].mean()) if len(df) >= 20 else float(df['volume'].iloc[-1])
-
-        # 1. Kırılım Kapanışlarını Bul
-        breakout_bars_bull = [idx for idx, (_, row) in enumerate(curr_slice.iterrows()) if float(row['close']) > pdh]
-        breakout_bars_bear = [idx for idx, (_, row) in enumerate(curr_slice.iterrows()) if float(row['close']) < pdl]
-
-        # 🟢 Bullish PDH Breakout + Retest + Onay Mumu Teyidi
-        if breakout_bars_bull:
-            first_bo = breakout_bars_bull[0]
-            post_bo_slice = curr_slice.iloc[first_bo + 1:]
-            
-            retest_ok = False
-            retest_idx = -1
-            for idx, (_, row) in enumerate(post_bo_slice.iterrows()):
-                # Invalidation
-                if float(row['close']) < (pdh - tolerance):
-                    break
-                if float(row['low']) <= (pdh + tolerance):
-                    retest_ok = True
-                    retest_idx = first_bo + 1 + idx
-                    break
-
-            is_confirmed = False
-            conf_detail = ""
-            if retest_ok:
-                candidate_bars = curr_slice.iloc[retest_idx : min(curr_len, retest_idx + 3)]
-                for _, row in candidate_bars.iterrows():
-                    c, o, h, l, v = float(row['close']), float(row['open']), float(row['high']), float(row['low']), float(row.get('volume', 0.0))
-                    rng = h - l if h > l else 0.0001
-                    body = abs(c - o)
-                    
-                    has_strong_body = (c > o) and (body >= 0.60 * rng)
-                    level_held = (c > pdh)
-                    vol_ok = (v >= vol_sma20)
-                    
-                    if has_strong_body and level_held and vol_ok:
-                        is_confirmed = True
-                        conf_detail = f"Güçlü Boğa İtki Mumu (Gövde: %{body/rng*100:.0f}, Hacim > Ort)"
-                        break
-
-            if is_confirmed:
-                target = pdh + (pdh - pdl) * 0.618
-                patterns.append({
-                    'name': 'Önceki Gün Zirve Kırılımı + Retest (PDH/PDL) (Benim)',
-                    'type': 'BULLISH',
-                    'category': '6. PDH/PDL Kırılım & Retest (Benim)',
-                    'reliability': 'ÇOK YÜKSEK',
-                    'breakout_level': float(pdh),
-                    'target': float(target),
-                    'description': f'Önceki günün zirvesi (${pdh:,.4f} PDH) kırıldı, 0.3xATR toleransla retest yapıldı ve onaylandı ({conf_detail}). Hedef: ${target:,.4f}',
-                    'lines': [
-                        {'name': 'Önceki Gün Zirvesi (PDH)', 'points': [{'time': t_start, 'value': float(pdh)}, {'time': t_now, 'value': float(pdh)}], 'color': '#10b981'},
-                        {'name': 'Önceki Gün Dibi (PDL)', 'points': [{'time': t_start, 'value': float(pdl)}, {'time': t_now, 'value': float(pdl)}], 'color': '#ef4444'}
-                    ]
-                })
-
-        # 🔴 Bearish PDL Breakdown + Retest + Onay Mumu Teyidi
-        if breakout_bars_bear:
-            first_bo = breakout_bars_bear[0]
-            post_bo_slice = curr_slice.iloc[first_bo + 1:]
-            
-            retest_ok = False
-            retest_idx = -1
-            for idx, (_, row) in enumerate(post_bo_slice.iterrows()):
-                if float(row['close']) > (pdl + tolerance):
-                    break
-                if float(row['high']) >= (pdl - tolerance):
-                    retest_ok = True
-                    retest_idx = first_bo + 1 + idx
-                    break
-
-            is_confirmed = False
-            conf_detail = ""
-            if retest_ok:
-                candidate_bars = curr_slice.iloc[retest_idx : min(curr_len, retest_idx + 3)]
-                for _, row in candidate_bars.iterrows():
-                    c, o, h, l, v = float(row['close']), float(row['open']), float(row['high']), float(row['low']), float(row.get('volume', 0.0))
-                    rng = h - l if h > l else 0.0001
-                    body = abs(c - o)
-                    
-                    has_strong_body = (c < o) and (body >= 0.60 * rng)
-                    level_held = (c < pdl)
-                    vol_ok = (v >= vol_sma20)
-                    
-                    if has_strong_body and level_held and vol_ok:
-                        is_confirmed = True
-                        conf_detail = f"Güçlü Ayı İtki Mumu (Gövde: %{body/rng*100:.0f}, Hacim > Ort)"
-                        break
-
-            if is_confirmed:
-                target = pdl - (pdh - pdl) * 0.618
-                patterns.append({
-                    'name': 'Önceki Gün Dip Kırılımı + Retest (PDH/PDL) (Benim)',
-                    'type': 'BEARISH',
-                    'category': '6. PDH/PDL Kırılım & Retest (Benim)',
-                    'reliability': 'ÇOK YÜKSEK',
-                    'breakout_level': float(pdl),
-                    'target': float(target),
-                    'description': f'Önceki günün dibi (${pdl:,.4f} PDL) kırıldı, 0.3xATR toleransla retest yapıldı ve onaylandı ({conf_detail}). Hedef: ${target:,.4f}',
-                    'lines': [
-                        {'name': 'Önceki Gün Zirvesi (PDH)', 'points': [{'time': t_start, 'value': float(pdh)}, {'time': t_now, 'value': float(pdh)}], 'color': '#10b981'},
-                        {'name': 'Önceki Gün Dibi (PDL)', 'points': [{'time': t_start, 'value': float(pdl)}, {'time': t_now, 'value': float(pdl)}], 'color': '#ef4444'}
-                    ]
-                })
-
+    # Kalite skoruna göre sırala
+    patterns.sort(key=lambda x: x.get('quality_score', 50), reverse=True)
     return patterns

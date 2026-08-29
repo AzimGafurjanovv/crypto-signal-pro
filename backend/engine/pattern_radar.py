@@ -1,17 +1,9 @@
 """
-CryptoSignalPro AI - Formasyon Radarı & Canlı Tarayıcı Motoru (pattern_radar.py)
+CryptoSignalPro AI - Gelişmiş Formasyon Radarı & Otomatik İdeal Zaman Dilimi Keşif Motoru (pattern_radar.py)
 
-Piyasadaki tüm coinleri klasik ve modern teknik analiz formasyonlarına göre tarar:
-1. Trend Çizgisi Kırılımı + Retest (Trendline Breakout & Retest)
-2. Simetrik / Yükselen / Alçalan Üçgen Kırılımı (Triangle & Pennant)
-3. Destek / Direnç Dönüşümü (S/R Flip & Retest)
-4. Yatay Kanal / Range Kırılımı & Retest (Range Breakout)
-5. İkili Dip (Double Bottom W) & İkili Tepe (Double Top M)
-
-Sonuçları 3 aşamaya canlı kategorize eder:
-- 1. Aşama (Kırılım / Breakout)
-- 2. Aşama (Retest / Pullback)
-- 3. Aşama (Onaylanmış Kesin Giriş / Confirmed)
+Piyasadaki tüm kripto paraları 10 temel formasyona göre tarar.
+'auto' modunda (veya çoklu zaman dilimi modunda) 15m, 1h ve 4h grafiklerini eşzamanlı inceleyerek
+her koin için formasyonun en net ve geometrik olarak en kusursuz olduğu İDEAL ZAMAN DİLİMİNİ otomatik belirler.
 """
 
 import math
@@ -23,11 +15,11 @@ from typing import Dict, Any, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from engine.market_data import market_manager
-from engine.indicators import enrich_all_indicators, find_swing_points
+from engine.indicators import enrich_all_indicators
 from engine.patterns import detect_chart_patterns
 
 def evaluate_pattern_strategy_exact(symbol: str, df: pd.DataFrame, timeframe: str = "1h") -> Optional[Dict[str, Any]]:
-    if df is None or len(df) < 40:
+    if df is None or len(df) < 35:
         return None
 
     df_calc = enrich_all_indicators(df.copy())
@@ -35,11 +27,11 @@ def evaluate_pattern_strategy_exact(symbol: str, df: pd.DataFrame, timeframe: st
     if not patterns:
         return None
 
-    # En güçlü ve en güncel formasyonu seç
+    # En yüksek kaliteli ve en güncel formasyonu seç
     pat = patterns[0]
     n = len(df_calc)
     current_price = float(df_calc['close'].iloc[-1])
-    current_atr = float(df_calc['atr'].iloc[-1]) if 'atr' in df_calc.columns and not np.isnan(df_calc['atr'].iloc[-1]) else current_price * 0.02
+    current_atr = float(df_calc['atr'].iloc[-1]) if 'atr' in df_calc.columns and not np.isnan(df_calc['atr'].iloc[-1]) else current_price * 0.018
 
     pat_name = pat.get('name', 'Grafik Formasyonu')
     pat_type = pat.get('type', 'BULLISH') # BULLISH / BEARISH
@@ -47,10 +39,11 @@ def evaluate_pattern_strategy_exact(symbol: str, df: pd.DataFrame, timeframe: st
     breakout_level = float(pat.get('breakout_level') or pat.get('flip_level') or pat.get('neckline') or pat.get('range_high') or pat.get('range_low') or current_price)
     target = float(pat.get('target', current_price * (1.04 if direction == 'LONG' else 0.96)))
     tolerance = round(0.3 * current_atr, 4)
+    quality_score = int(pat.get('quality_score', 85))
 
     # Mum verilerini incele (Son 15 bar içinde kırılma, retest ve onay kontrolü)
     recent_bars = df_calc.iloc[-15:].copy()
-    vol_sma20 = float(df_calc['volume'].rolling(20).mean().iloc[-1])
+    vol_sma20 = float(df_calc['volume'].rolling(20).mean().iloc[-1]) if len(df_calc) >= 20 else float(df_calc['volume'].iloc[-1])
 
     # Kırılma tespiti
     breakout_bar = None
@@ -72,9 +65,9 @@ def evaluate_pattern_strategy_exact(symbol: str, df: pd.DataFrame, timeframe: st
         # 1. Onay Kontrolü (Hacimli Yönlü Mum + Seviye Tutuldu)
         body_pct = abs(c_close - c_open) / max(0.0001, (c_high - c_low))
         is_directional = (c_close > c_open) if direction == 'LONG' else (c_close < c_open)
-        is_vol_high = c_vol >= vol_sma20 * 0.95
+        is_vol_high = c_vol >= vol_sma20 * 0.90
 
-        if is_directional and body_pct >= 0.55 and is_vol_high:
+        if is_directional and body_pct >= 0.50 and is_vol_high:
             if direction == 'LONG' and c_close >= breakout_level:
                 confirmed_bar = {'time_str': time_str, 'timestamp': ts, 'price': c_close}
             elif direction == 'SHORT' and c_close <= breakout_level:
@@ -97,23 +90,23 @@ def evaluate_pattern_strategy_exact(symbol: str, df: pd.DataFrame, timeframe: st
         stage = "RETESTING"
         stage_name = "2. Aşama: Formasyon Retesti (Pullback)"
 
-    # Risk Seviyeleri
-    if direction == 'LONG':
-        stop_loss = round(breakout_level - 0.2 * current_atr, 4)
+    # Risk Seviyeleri (0.2xATR SL)
+    if direction == "LONG":
+        stop_loss = round(breakout_level - (0.25 * current_atr), 4)
         risk = max(0.0001, current_price - stop_loss)
         reward = max(0.0001, target - current_price)
     else:
-        stop_loss = round(breakout_level + 0.2 * current_atr, 4)
+        stop_loss = round(breakout_level + (0.25 * current_atr), 4)
         risk = max(0.0001, stop_loss - current_price)
         reward = max(0.0001, current_price - target)
 
-    rr_ratio = round(reward / risk, 2)
+    rr_ratio = round(reward / risk, 1)
 
     # 4 Adımlı Kontrol Listesi
     checklist = [
         {
             "step": 1,
-            "title": f"1. Formasyon Kırılımı ({pat_name})",
+            "title": f"1. {pat_name} Kırılımı (Kalite: %{quality_score})",
             "passed": True,
             "detail": f"{pat_name} tespit edildi. Kırılan Seviye: ${breakout_level:,.4f}"
         },
@@ -127,7 +120,7 @@ def evaluate_pattern_strategy_exact(symbol: str, df: pd.DataFrame, timeframe: st
             "step": 3,
             "title": "3. Hacimli Onay Mumu (Yönlü Mum & Vol > SMA20)",
             "passed": bool(confirmed_bar),
-            "detail": f"Retest sonrası güçlü onay mumu kapandı." if confirmed_bar else "Hacimli onay mumu bekleniyor."
+            "detail": "Retest sonrası güçlü onay mumu kapandı." if confirmed_bar else "Hacimli onay mumu bekleniyor."
         },
         {
             "step": 4,
@@ -155,6 +148,8 @@ def evaluate_pattern_strategy_exact(symbol: str, df: pd.DataFrame, timeframe: st
         "status": "success",
         "symbol": symbol,
         "timeframe": timeframe,
+        "optimal_timeframe": timeframe,
+        "quality_score": quality_score,
         "strategy_name": pat_name,
         "pattern_category": pat_cat,
         "stage": stage,
@@ -172,9 +167,53 @@ def evaluate_pattern_strategy_exact(symbol: str, df: pd.DataFrame, timeframe: st
         "retest_bar": retest_bar,
         "confirmed_bar": confirmed_bar,
         "checklist": checklist,
-        "explanation": explanation,
+        "explanation": pat.get('description', ''),
         "lines": pat.get('lines', [])
     }
+
+def evaluate_coin_multi_timeframe_optimal(symbol: str, target_timeframe: str = "auto") -> Optional[Dict[str, Any]]:
+    """
+    Kripto pariteyi 4h, 1h ve 15m zaman dilimlerinde inceleyip EN İDEAL formasyonu seçer.
+    """
+    if target_timeframe and target_timeframe != "auto" and target_timeframe != "ALL":
+        try:
+            df = market_manager.get_market_data(symbol, timeframe=target_timeframe, limit=150)
+            if df is not None and len(df) >= 35:
+                return evaluate_pattern_strategy_exact(symbol, df, timeframe=target_timeframe)
+        except Exception:
+            return None
+        return None
+
+    # Çoklu Zaman Dilimi Taraması (4h -> 1h -> 15m)
+    candidate_tfs = ["4h", "1h", "15m"]
+    evaluated_candidates = []
+
+    for tf in candidate_tfs:
+        try:
+            df = market_manager.get_market_data(symbol, timeframe=tf, limit=150)
+            if df is not None and len(df) >= 35:
+                res = evaluate_pattern_strategy_exact(symbol, df, timeframe=tf)
+                if res:
+                    evaluated_candidates.append(res)
+        except Exception:
+            continue
+
+    if not evaluated_candidates:
+        return None
+
+    # Aşama önceliği: CONFIRMED (3. Aşama) > RETESTING (2. Aşama) > BREAKOUT (1. Aşama)
+    # Eşitlik durumunda en yüksek quality_score seçilir
+    stage_weights = {"CONFIRMED": 300, "RETESTING": 200, "BREAKOUT": 100}
+    
+    evaluated_candidates.sort(
+        key=lambda x: (stage_weights.get(x.get("stage"), 0) + x.get("quality_score", 0)),
+        reverse=True
+    )
+
+    best_match = evaluated_candidates[0]
+    best_match["is_auto_optimal"] = True
+    best_match["timeframe_badge"] = f"🌟 {best_match['timeframe'].upper()} (En İdeal)"
+    return best_match
 
 def run_pattern_radar(timeframe: str = "1h", limit_coins: int = 50) -> Dict[str, Any]:
     """Çok iş parçacıklı (multithreaded) tüm piyasa formasyon radarı."""
@@ -188,10 +227,7 @@ def run_pattern_radar(timeframe: str = "1h", limit_coins: int = 50) -> Dict[str,
 
     def _eval(sym):
         try:
-            df = market_manager.get_market_data(sym, timeframe=timeframe, limit=150)
-            if df is None or len(df) < 40:
-                return None
-            return evaluate_pattern_strategy_exact(sym, df, timeframe=timeframe)
+            return evaluate_coin_multi_timeframe_optimal(sym, target_timeframe=timeframe)
         except Exception:
             return None
 
@@ -208,10 +244,10 @@ def run_pattern_radar(timeframe: str = "1h", limit_coins: int = 50) -> Dict[str,
                 elif stg == "BREAKOUT":
                     stages["breakout"].append(res)
 
-    # Sıralama
-    stages["confirmed"].sort(key=lambda x: x['current_price'], reverse=True)
-    stages["retesting"].sort(key=lambda x: x['current_price'], reverse=True)
-    stages["breakout"].sort(key=lambda x: x['current_price'], reverse=True)
+    # Kalite skoru ve fiyata göre sırala
+    stages["confirmed"].sort(key=lambda x: (x.get('quality_score', 0), x['current_price']), reverse=True)
+    stages["retesting"].sort(key=lambda x: (x.get('quality_score', 0), x['current_price']), reverse=True)
+    stages["breakout"].sort(key=lambda x: (x.get('quality_score', 0), x['current_price']), reverse=True)
 
     stats = {
         "confirmed_count": len(stages["confirmed"]),

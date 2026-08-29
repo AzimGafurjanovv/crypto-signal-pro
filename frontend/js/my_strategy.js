@@ -74,41 +74,39 @@ function switchStrategy(newStrat) {
 
     const tabPdh = document.getElementById('tabPdhPdlBtn');
     const tabSwing = document.getElementById('tabSwingBtn');
+    const tabPattern = document.getElementById('tabPatternBtn');
     const swingWrapper = document.getElementById('swingLookbackWrapper');
     const heroBadge = document.getElementById('heroStrategyBadge');
     const heroSub = document.getElementById('heroStrategySub');
     const heroTitle = document.getElementById('heroStrategyTitle');
     const heroDesc = document.getElementById('heroStrategyDesc');
 
-    if (activeStrategy === 'PDH_PDL') {
-        // Tab Stilleri
-        if (tabPdh) {
-            tabPdh.className = "flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold text-xs flex items-center justify-center gap-2 transition shadow-md shadow-cyan-600/20 cursor-pointer";
-        }
-        if (tabSwing) {
-            tabSwing.className = "flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-gray-900 text-gray-400 hover:text-white hover:bg-gray-800 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer border border-transparent hover:border-gray-700";
-        }
-        if (swingWrapper) swingWrapper.classList.add('hidden');
+    // Tab stillerini sıfırla
+    const inactiveClass = "flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-gray-900 text-gray-400 hover:text-white hover:bg-gray-800 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer border border-transparent hover:border-gray-700";
+    if (tabPdh) tabPdh.className = inactiveClass;
+    if (tabSwing) tabSwing.className = inactiveClass;
+    if (tabPattern) tabPattern.className = inactiveClass;
+    if (swingWrapper) swingWrapper.classList.add('hidden');
 
-        // Hero Bilgileri
+    if (activeStrategy === 'PDH_PDL') {
+        if (tabPdh) tabPdh.className = "flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-md shadow-cyan-600/20 cursor-pointer";
         if (heroBadge) heroBadge.textContent = "⭐ 1. STRATEJİ (GÜNLÜK LİKİDİTE)";
         if (heroSub) heroSub.textContent = "UTC 00:00–24:00 Daily Boundary";
         if (heroTitle) heroTitle.textContent = "Önceki Gün Zirve / Dip Kırılımı + Retest & Onay (PDH / PDL)";
         if (heroDesc) heroDesc.innerHTML = "Bu radar, Binance canlı piyasasındaki tüm coinleri 24 saatlik UTC döngüsünde mikroskop altına alır. <strong>1. Aşama (Kırılım)</strong>, <strong>2. Aşama (0.3xATR Retest)</strong> ve <strong>3. Aşama (Hacimli Onay Mumu ile Kesin Giriş)</strong> olarak 3 ayrı bölmede canlı kategorize eder.";
-    } else {
-        // Swing Stratejisi
-        if (tabPdh) {
-            tabPdh.className = "flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-gray-900 text-gray-400 hover:text-white hover:bg-gray-800 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer border border-transparent hover:border-gray-700";
-        }
-        if (tabSwing) {
-            tabSwing.className = "flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold text-xs flex items-center justify-center gap-2 transition shadow-md shadow-indigo-600/20 cursor-pointer";
-        }
+    } else if (activeStrategy === 'SWING_HL') {
+        if (tabSwing) tabSwing.className = "flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-md shadow-indigo-600/20 cursor-pointer";
         if (swingWrapper) swingWrapper.classList.remove('hidden');
-
         if (heroBadge) heroBadge.textContent = "🌊 2. STRATEJİ (YAPISAL DÖNÜŞLER)";
         if (heroSub) heroSub.textContent = "Lookback(3) Confirmed Swing Structure";
         if (heroTitle) heroTitle.textContent = "Yapısal Swing High / Low Kırılımı + Retest & Onay";
         if (heroDesc) heroDesc.innerHTML = "Bu radar, piyasanın kendi iç dönüş noktalarını (Swing High/Low) takip eder. Sabit gün döngüsü yerine gün içinde oluşan yeni teyitli tepelerin/dipların kırılımını, <strong>0.3xATR retestini</strong> ve <strong>hacimli yönlü onay mumunu</strong> canlı tespit eder.";
+    } else { // CHART_PATTERNS
+        if (tabPattern) tabPattern.className = "flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-md shadow-amber-500/20 cursor-pointer";
+        if (heroBadge) heroBadge.textContent = "📐 3. STRATEJİ (FORMASYON SCANNER)";
+        if (heroSub) heroSub.textContent = "Trendline / Triangles / S-R Flip / Double Bottom";
+        if (heroTitle) heroTitle.textContent = "Klasik & Modern Grafik Formasyonları Radarı";
+        if (heroDesc) heroDesc.innerHTML = "Düşen/Yükselen Trend Çizgileri, Simetrik/Takoz Üçgenler, Destek-Direnç Flip ve İkili Dip (W) formasyonlarının <strong>kırılımını</strong>, <strong>retestini</strong> ve <strong>onaylı kesin giriş seviyelerini</strong> canlı tarar.";
     }
 
     lucide.createIcons();
@@ -172,9 +170,12 @@ async function fetchActiveRadarData(showLoadingFull = false, isSilentBackground 
     }
 
     try {
-        const url = activeStrategy === 'PDH_PDL' 
-            ? `/api/pdh-pdl-radar?timeframe=${tf}&limit_coins=50`
-            : `/api/swing-radar?timeframe=${tf}&limit_coins=50&swing_lookback=${lookback}`;
+        let url = `/api/pdh-pdl-radar?timeframe=${tf}&limit_coins=50`;
+        if (activeStrategy === 'SWING_HL') {
+            url = `/api/swing-radar?timeframe=${tf}&limit_coins=50&swing_lookback=${lookback}`;
+        } else if (activeStrategy === 'CHART_PATTERNS') {
+            url = `/api/pattern-radar?timeframe=${tf}&limit_coins=50`;
+        }
 
         const res = await fetch(url);
         const data = await res.json();

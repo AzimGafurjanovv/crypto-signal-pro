@@ -88,17 +88,23 @@ def send_retest_alert(coin_data: Dict[str, Any], strategy_type: str = "PDH_PDL")
     retest_time = retest_bar.get("time_str", "Şimdi")
 
     dir_icon = "🟢" if direction == "LONG" else "🔴"
+    strat_name_detail = coin_data.get("strategy_name", "Teknik Formasyon")
     
     if strategy_type == "PDH_PDL":
         strat_badge = "📅 1. STRATEJİ: PDH / PDL (Dünün Zirve/Dibi)"
         header_tag = "[1. STRATEJİ: PDH/PDL]"
         level_name = "Dünün Zirvesi (PDH)" if direction == "LONG" else "Dünün Dibi (PDL)"
         strat_desc = "UTC 00:00–24:00 Günlük seviye kırılımı sonrası 0.3xATR retesti yapıldı."
-    else:
+    elif strategy_type == "SWING_HL":
         strat_badge = "🌊 2. STRATEJİ: SWING HIGH / LOW (Yapısal Dönüşler)"
         header_tag = "[2. STRATEJİ: SWING H/L]"
         level_name = "Onaylı Swing High" if direction == "LONG" else "Onaylı Swing Low"
         strat_desc = "Lookback(3) Yapısal dönüş noktası kırılımı sonrası 0.3xATR retesti yapıldı."
+    else:
+        strat_badge = f"📐 3. STRATEJİ: FORMASYON RADARI ({strat_name_detail})"
+        header_tag = f"[3. FORMASYON: {strat_name_detail.split('(')[0].strip()}]"
+        level_name = "Formasyon Kırılım Seviyesi"
+        strat_desc = f"{strat_name_detail} kırılımı sonrası retest/pullback gerçekleşti."
 
     text = f"""<b>⚠️ {header_tag} RETEST ERKEN UYARISI!</b> 🎯
 
@@ -141,15 +147,19 @@ def send_confirmed_alert(coin_data: Dict[str, Any], strategy_type: str = "PDH_PD
     rr = coin_data.get("risk_reward", "1:2.0+")
     conf_bar = coin_data.get("confirmed_bar", {})
     conf_time = conf_bar.get("time_str", "Şimdi")
+    strat_name_detail = coin_data.get("strategy_name", "Teknik Formasyon")
 
     dir_icon = "🟢" if direction == "LONG" else "🔴"
     
     if strategy_type == "PDH_PDL":
         strat_badge = "📅 1. STRATEJİ: PDH / PDL (Dünün Zirve/Dibi)"
         header_tag = "[1. STRATEJİ: PDH/PDL]"
-    else:
+    elif strategy_type == "SWING_HL":
         strat_badge = "🌊 2. STRATEJİ: SWING HIGH / LOW (Yapısal Dönüşler)"
         header_tag = "[2. STRATEJİ: SWING H/L]"
+    else:
+        strat_badge = f"📐 3. STRATEJİ: FORMASYON ({strat_name_detail})"
+        header_tag = f"[3. FORMASYON: {strat_name_detail.split('(')[0].strip()}]"
 
     text = f"""<b>🚀 {header_tag} 🔥 KESİN GİRİŞ ONAYLANDI!</b>
 
@@ -167,7 +177,7 @@ def send_confirmed_alert(coin_data: Dict[str, Any], strategy_type: str = "PDH_PD
 ⚖️ <b>Risk / Kazanç (R:R):</b> <code>{rr} R</code>
 ━━━━━━━━━━━━━━━━━━━━
 
-✅ <b>Onay Kuralı:</b> Retest sonrası Yutan Mum (Engulfing) veya %60+ Gövdeli Mum, 20 SMA üzeri Hacim ile kapandı.
+✅ <b>Onay Kuralı:</b> Retest sonrası Yutan Mum veya %55+ Gövdeli Mum, 20 SMA üzeri Hacim ile kapandı.
 ⏰ <b>Onay Saati:</b> {conf_time}
 
 🔗 <a href="http://47.251.110.202/my_strategy.html">Grafiği İnteraktif İncele</a>"""

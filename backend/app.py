@@ -26,6 +26,7 @@ from engine.indicators import enrich_all_indicators
 from engine.backtest_engine import run_strategy_backtest
 from engine.pdh_pdl_radar import run_pdh_pdl_radar
 from engine.swing_radar import run_swing_radar
+from engine.pattern_radar import run_pattern_radar
 from engine.telegram_notifier import load_telegram_config, save_telegram_config, send_telegram_raw_message
 from engine.strategy_alert_service import telegram_alert_service
 from engine.gemini_engine import analyze_with_gemini, get_active_gemini_key, chat_with_gemini, discover_available_gemini_models
@@ -209,6 +210,12 @@ async def get_pdh_pdl_radar(timeframe: str = Query("1h"), limit_coins: int = Que
 async def get_swing_radar(timeframe: str = Query("1h"), limit_coins: int = Query(50), swing_lookback: int = Query(3)):
     """Kullanıcının 2. Özel Stratejisi (Yapısal Swing High/Low Breakout-Retest) canlı taraması."""
     report = run_swing_radar(timeframe=timeframe, limit_coins=limit_coins, swing_lookback=swing_lookback)
+    return sanitize_json(report)
+
+@app.get("/api/pattern-radar")
+async def get_pattern_radar(timeframe: str = Query("1h"), limit_coins: int = Query(50)):
+    """Kullanıcının 3. Özel Stratejisi (Klasik ve Modern Formasyon Radarı - Trendline, Üçgen, S/R Flip, İkili Dip)."""
+    report = run_pattern_radar(timeframe=timeframe, limit_coins=limit_coins)
     return sanitize_json(report)
 
 @app.get("/api/pairs")

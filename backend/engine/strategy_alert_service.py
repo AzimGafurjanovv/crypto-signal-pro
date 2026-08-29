@@ -15,6 +15,7 @@ import asyncio
 from typing import Dict, Any
 from engine.pdh_pdl_radar import run_pdh_pdl_radar
 from engine.swing_radar import run_swing_radar
+from engine.pattern_radar import run_pattern_radar
 from engine.telegram_notifier import load_telegram_config, send_retest_alert, send_confirmed_alert
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
@@ -96,6 +97,15 @@ class StrategyAlertService:
                         self._process_stage_alerts(swing_res.get("stages", {}), "SWING_HL", tf)
                 except Exception as e:
                     print(f"⚠️ Swing Radar check error: {e}")
+
+            # 3. Strateji: Formasyon Radarı (Trendline, Üçgen, S/R Flip, İkili Dip)
+            if "CHART_PATTERNS" in strategies or True:
+                try:
+                    pat_res = run_pattern_radar(timeframe=tf, limit_coins=30)
+                    if pat_res.get("status") == "success":
+                        self._process_stage_alerts(pat_res.get("stages", {}), "CHART_PATTERNS", tf)
+                except Exception as e:
+                    print(f"⚠️ Pattern Radar check error: {e}")
 
         self._cleanup_old_history()
 

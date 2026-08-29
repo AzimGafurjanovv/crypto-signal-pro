@@ -26,6 +26,8 @@ from engine.indicators import enrich_all_indicators
 from engine.backtest_engine import run_strategy_backtest
 from engine.pdh_pdl_radar import run_pdh_pdl_radar
 from engine.swing_radar import run_swing_radar
+from engine.telegram_notifier import load_telegram_config, save_telegram_config, send_telegram_raw_message
+from engine.strategy_alert_service import telegram_alert_service
 from engine.gemini_engine import analyze_with_gemini, get_active_gemini_key, chat_with_gemini, discover_available_gemini_models
 
 # -------------------------------------------------------------
@@ -133,13 +135,19 @@ bg_scanner = ServerBackgroundScanner()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Sunucu başlatıldığında arka plan işçisini başlat
-    task = asyncio.create_task(bg_scanner.background_loop())
+    # Sunucu başlatıldığında arka plan işçilerini başlat
+    scan_task = asyncio.create_task(bg_scanner.background_loop())
+    telegram_task = asyncio.create_task(telegram_alert_service.start_loop())
     yield
     # Sunucu kapatılırken iptal et
-    task.cancel()
+    scan_task.cancel()
+    telegram_task.cancel()
     try:
-        await task
+        await scan_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await telegram_task
     except asyncio.CancelledError:
         pass
 
@@ -665,6 +673,76 @@ async def trigger_system_update():
             return {"status": "success", "message": "Git pull arka planda çalıştırıldı."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+class TelegramSettingsRequest(BaseModel):
+    enabled: bool = True
+    bot_token: str
+    chat_id: str
+    notify_retest: bool = True
+    notify_confirmed: bool = True
+    timeframes: List[str] = ["1h"]
+    strategies: List[str] = ["PDH_PDL", "SWING_HL"]
+
+@app.get("/api/telegram/settings")
+async def get_telegram_settings():
+    config = load_telegram_config()
+    # Mask bot token for security
+    token = config.get("bot_token", "")
+    masked_token = f"{token[:8]}...{token[-4:]}" if len(token) > 15 else token
+    return {
+        "status": "success",
+        "config": {
+            **config,
+            "masked_token": masked_token,
+            "has_token": bool(token)
+        }
+    }
+
+@app.post("/api/telegram/settings")
+async def save_telegram_settings_api(req: TelegramSettingsRequest):
+    current = load_telegram_config()
+    new_token = req.bot_token.strip()
+    # If placeholder / masked sent back, preserve original
+    if "..." in new_token and current.get("bot_token"):
+        new_token = current["bot_token"]
+        
+    config = {
+        "enabled": req.enabled,
+        "bot_token": new_token,
+        "chat_id": req.chat_id.strip(),
+        "notify_retest": req.notify_retest,
+        "notify_confirmed": req.notify_confirmed,
+        "timeframes": req.timeframes or ["1h"],
+        "strategies": req.strategies or ["PDH_PDL", "SWING_HL"]
+    }
+    saved = save_telegram_config(config)
+    if not saved:
+        raise HTTPException(status_code=500, detail="Telegram ayarları kaydedilemedi.")
+    return {"status": "success", "message": "Telegram bildirim ayarları başarıyla kaydedildi!"}
+
+@app.post("/api/telegram/test")
+async def test_telegram_alert(req: Optional[TelegramSettingsRequest] = None):
+    bot_token = req.bot_token.strip() if req and req.bot_token else None
+    chat_id = req.chat_id.strip() if req and req.chat_id else None
+    
+    if not bot_token or not chat_id or "..." in bot_token:
+        config = load_telegram_config()
+        bot_token = config.get("bot_token")
+        chat_id = config.get("chat_id")
+        
+    if not bot_token or not chat_id:
+        return {"status": "error", "message": "Lütfen önce Bot Token ve Chat ID giriniz."}
+        
+    test_msg = """<b>🚀 CryptoSignalPro AI — Telegram Bildirim Testi Başarılı!</b>
+
+✅ Sunucu bağlantısı kuruldu.
+🎯 <b>2. Aşama (Retest Erken Uyarı)</b> ve 
+🔥 <b>3. Aşama (Kesin Giriş Sinyali)</b> bildirimleri bu sohbete otomatik olarak iletilecektir.
+
+🌐 <i>Sistem 7/24 piyasayı taramaya devam ediyor.</i>"""
+
+    res = send_telegram_raw_message(bot_token, chat_id, test_msg)
+    return res
 
 def sanitize_json(data: Any) -> Any:
     if isinstance(data, dict):

@@ -120,6 +120,13 @@
                     <span class="hidden sm:inline">Backtest Lab</span>
                 </a>
 
+                <!-- Telegram Bildirim Butonu -->
+                <button onclick="openTelegramModal()" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 shadow-sm flex items-center gap-1.5 cursor-pointer transition">
+                    <i data-lucide="send" class="w-4 h-4 text-sky-400"></i>
+                    <span class="hidden sm:inline">Telegram Alarmları</span>
+                    <span id="tgStatusBadge" class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-gray-800 text-gray-400">○</span>
+                </button>
+
                 <!-- Canlı Saat -->
                 <div class="hidden md:flex items-center space-x-2 bg-gray-950/80 px-3 py-1.5 rounded-xl border border-gray-800 font-mono text-xs text-gray-300">
                     <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
@@ -434,8 +441,113 @@
         </div>
     </div>
 
+    <!-- 📱 TELEGRAM BİLDİRİM VE ALARM AYARLARI MODALİ -->
+    <div id="telegramSettingsModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+        <div class="relative w-full max-w-lg bg-gray-900 border border-sky-500/40 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+            
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-800 bg-gray-950/90">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center border border-sky-500/40">
+                        <i data-lucide="send" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold text-white flex items-center gap-2">
+                            Telegram Canlı Alarm Botu
+                        </h3>
+                        <div class="text-[11px] text-gray-400 font-mono">Özel Strateji 2. & 3. Aşama Bildirimleri</div>
+                    </div>
+                </div>
+                <button onclick="closeTelegramModal()" class="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition cursor-pointer">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Modal Body -->
+            <div class="p-6 space-y-4 text-xs font-sans">
+                
+                <!-- Ana Aç / Kapa Switch -->
+                <div class="flex items-center justify-between p-3.5 rounded-2xl bg-gray-950/80 border border-gray-800">
+                    <div>
+                        <div class="font-bold text-white text-xs">Telegram Bildirimlerini Etkinleştir</div>
+                        <div class="text-[11px] text-gray-400">7/24 Arka planda sunucu tarar ve anlık mesaj atar</div>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="tgEnabledToggle" class="sr-only peer" checked>
+                        <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-500"></div>
+                    </label>
+                </div>
+
+                <!-- Bot Token Input -->
+                <div class="space-y-1.5">
+                    <label class="block font-semibold text-gray-300">
+                        🤖 Telegram Bot Token:
+                        <span class="text-gray-500 font-normal">(@BotFather üzerinden aldığınız token)</span>
+                    </label>
+                    <input type="password" id="tgBotTokenInput" placeholder="Örn: 7123456789:AAFl..." class="w-full bg-gray-950 border border-gray-700 rounded-xl px-3.5 py-2.5 font-mono text-xs text-white placeholder-gray-600 focus:outline-none focus:border-sky-500 transition">
+                </div>
+
+                <!-- Chat ID Input -->
+                <div class="space-y-1.5">
+                    <label class="block font-semibold text-gray-300">
+                        👤 Telegram Chat ID:
+                        <span class="text-gray-500 font-normal">(@userinfobot ile öğrendiğiniz ID)</span>
+                    </label>
+                    <input type="text" id="tgChatIdInput" placeholder="Örn: 123456789" class="w-full bg-gray-950 border border-gray-700 rounded-xl px-3.5 py-2.5 font-mono text-xs text-white placeholder-gray-600 focus:outline-none focus:border-sky-500 transition">
+                </div>
+
+                <!-- Alarm Türleri Seçimi -->
+                <div class="space-y-2 pt-2 border-t border-gray-800">
+                    <div class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Gönderilecek Bildirim Türleri:</div>
+                    
+                    <label class="flex items-center gap-3 p-2.5 rounded-xl bg-gray-950/60 border border-emerald-500/30 cursor-pointer hover:bg-gray-950">
+                        <input type="checkbox" id="tgConfirmedToggle" checked class="w-4 h-4 text-emerald-500 rounded bg-gray-900 border-gray-700 focus:ring-0">
+                        <div>
+                            <div class="font-bold text-emerald-400">🔥 3. Aşama: ONAYLANANLAR (Kesin Giriş Sinyali)</div>
+                            <div class="text-[10px] text-gray-400">Giriş Fiyatı, 0.2xATR Stop Loss, Dinamik TP ve R:R ile anlık gönderilir.</div>
+                        </div>
+                    </label>
+
+                    <label class="flex items-center gap-3 p-2.5 rounded-xl bg-gray-950/60 border border-amber-500/30 cursor-pointer hover:bg-gray-950">
+                        <input type="checkbox" id="tgRetestToggle" checked class="w-4 h-4 text-amber-500 rounded bg-gray-900 border-gray-700 focus:ring-0">
+                        <div>
+                            <div class="font-bold text-amber-400">🎯 2. Aşama: RETEST YAPANLAR (Erken Uyarı Alarmı)</div>
+                            <div class="text-[10px] text-gray-400">Fiyat 0.3xATR toleransla seviyeyi test ettiğinde hazır olmanız için alarm verir.</div>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- Kolay Yardım Kutusu -->
+                <div class="p-3 rounded-xl bg-sky-500/10 border border-sky-500/20 text-[11px] text-sky-300 space-y-1">
+                    <div class="font-bold flex items-center gap-1">
+                        <i data-lucide="info" class="w-3.5 h-3.5"></i>
+                        <span>1 Dakikada Bot Oluşturma:</span>
+                    </div>
+                    <div>1. Telegram'da <code>@BotFather</code>'a gidip <code>/newbot</code> yazın ve Token'ı kopyalayın.</div>
+                    <div>2. Telegram'da <code>@userinfobot</code>'a <code>/start</code> diyerek kendi Chat ID'nizi öğrenin.</div>
+                </div>
+
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="flex items-center justify-between p-4 border-t border-gray-800 bg-gray-950/90 gap-3">
+                <button id="tgTestBtn" onclick="sendTelegramTestMessage()" class="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-sky-300 border border-gray-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition">
+                    <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                    <span>🔔 Test Bildirimi Gönder</span>
+                </button>
+
+                <button id="tgSaveBtn" onclick="saveTelegramSettings()" class="px-5 py-2 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-sky-500/20 cursor-pointer transition">
+                    <i data-lucide="check" class="w-4 h-4"></i>
+                    <span>Ayarları Kaydet & Aktif Et</span>
+                </button>
+            </div>
+
+        </div>
+    </div>
+
     <!-- JavaScript Dosyaları -->
     <script src="/static/js/chart.js"></script>
+    <script src="/static/js/telegram.js"></script>
     <script src="/static/js/my_strategy.js"></script>
 </body>
 </html>

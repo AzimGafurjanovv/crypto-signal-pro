@@ -1,0 +1,16 @@
+{
+    "enabled": false,
+    "bot_token": "",
+    "chat_id": "",
+    "notify_retest": true,
+    "notify_confirmed": true,
+    "timeframes": [
+        "1h",
+        "15m",
+        "4h"
+    ],
+    "strategies": [
+        "PDH_PDL",
+        "SWING_HL"
+    ]
+}

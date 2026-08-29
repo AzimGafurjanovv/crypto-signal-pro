@@ -1,5 +1,9 @@
 # ⚡ CryptoSignalPro AI - Gelişmiş Kripto Sinyal ve Setup Bulucu
 
+🌐 **Canlı Web Sitesi**: [http://47.251.110.202/](http://47.251.110.202/)  
+⭐ **Özel Stratejiler Radarı**: [http://47.251.110.202/my_strategy.html](http://47.251.110.202/my_strategy.html)  
+🧪 **Backtest Laboratuvarı**: [http://47.251.110.202/backtest.html](http://47.251.110.202/backtest.html)  
+
 Piyasadaki en başarılı kurumsal alım-satım konseptleri (**Smart Money Concepts - SMC**, **Fair Value Gap - FVG**, **Order Block - OB**), **RSI Fiyat Uyumsuzlukları (Divergence)**, **EMA Trend Takibi** ve **Hacimli Kırılımlar** üzerine inşa edilmiş; **otomatik R:R, kademeli TP/SL hesaplayan**, **TradingView interaktif grafiklerine sahip** ve **AI için tek tıkla analiz promptu üreten** profesyonel kripto tarayıcı web uygulaması.
 
 ---

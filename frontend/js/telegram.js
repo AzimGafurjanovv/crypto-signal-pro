@@ -62,13 +62,13 @@ async function saveTelegramSettings() {
     if (!tokenInput || !chatIdInput) return;
 
     const payload = {
-        enabled: enabledToggle ? enabledToggle.checked : true,
+        enabled: Boolean(enabledToggle && enabledToggle.checked),
         bot_token: tokenInput.value.trim(),
         chat_id: chatIdInput.value.trim(),
-        notify_retest: retestToggle ? retestToggle.checked : true,
-        notify_confirmed: confirmedToggle ? confirmedToggle.checked : true,
+        notify_retest: Boolean(retestToggle && retestToggle.checked),
+        notify_confirmed: Boolean(confirmedToggle && confirmedToggle.checked),
         timeframes: ["1h", "15m", "4h"],
-        strategies: ["PDH_PDL", "SWING_HL"]
+        strategies: ["PDH_PDL", "SWING_HL", "CHART_PATTERNS"]
     };
 
     if (!payload.bot_token || !payload.chat_id) {

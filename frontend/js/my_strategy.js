@@ -76,6 +76,7 @@ function switchStrategy(newStrat) {
     const tabSwing = document.getElementById('tabSwingBtn');
     const tabPattern = document.getElementById('tabPatternBtn');
     const swingWrapper = document.getElementById('swingLookbackWrapper');
+    const patternGuide = document.getElementById('patternGuideWrapper');
     const heroBadge = document.getElementById('heroStrategyBadge');
     const heroSub = document.getElementById('heroStrategySub');
     const heroTitle = document.getElementById('heroStrategyTitle');
@@ -87,6 +88,7 @@ function switchStrategy(newStrat) {
     if (tabSwing) tabSwing.className = inactiveClass;
     if (tabPattern) tabPattern.className = inactiveClass;
     if (swingWrapper) swingWrapper.classList.add('hidden');
+    if (patternGuide) patternGuide.classList.add('hidden');
 
     if (activeStrategy === 'PDH_PDL') {
         if (tabPdh) tabPdh.className = "flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-md shadow-cyan-600/20 cursor-pointer";
@@ -103,10 +105,11 @@ function switchStrategy(newStrat) {
         if (heroDesc) heroDesc.innerHTML = "Bu radar, piyasanın kendi iç dönüş noktalarını (Swing High/Low) takip eder. Sabit gün döngüsü yerine gün içinde oluşan yeni teyitli tepelerin/dipların kırılımını, <strong>0.3xATR retestini</strong> ve <strong>hacimli yönlü onay mumunu</strong> canlı tespit eder.";
     } else { // CHART_PATTERNS
         if (tabPattern) tabPattern.className = "flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-md shadow-amber-500/20 cursor-pointer";
+        if (patternGuide) patternGuide.classList.remove('hidden');
         if (heroBadge) heroBadge.textContent = "📐 3. STRATEJİ (FORMASYON SCANNER)";
-        if (heroSub) heroSub.textContent = "Trendline / Triangles / S-R Flip / Double Bottom";
+        if (heroSub) heroSub.textContent = "10 Klasik & Modern Formasyon Motoru";
         if (heroTitle) heroTitle.textContent = "Klasik & Modern Grafik Formasyonları Radarı";
-        if (heroDesc) heroDesc.innerHTML = "Düşen/Yükselen Trend Çizgileri, Simetrik/Takoz Üçgenler, Destek-Direnç Flip ve İkili Dip (W) formasyonlarının <strong>kırılımını</strong>, <strong>retestini</strong> ve <strong>onaylı kesin giriş seviyelerini</strong> canlı tarar.";
+        if (heroDesc) heroDesc.innerHTML = "Düşen/Yükselen Trend Çizgileri, Simetrik/Yükselen/Alçalan Üçgenler, Destek-Direnç Flip, Range ve İkili Dip (W) / Tepe (M) formasyonlarının <strong>kırılımını</strong>, <strong>retestini</strong> ve <strong>onaylı kesin giriş seviyelerini</strong> canlı tarar.";
     }
 
     lucide.createIcons();

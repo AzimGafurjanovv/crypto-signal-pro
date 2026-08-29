@@ -85,7 +85,7 @@ class StrategyAlertService:
                 try:
                     pdh_res = await asyncio.to_thread(run_pdh_pdl_radar, timeframe=tf, limit_coins=30)
                     if pdh_res.get("status") == "success":
-                        await asyncio.to_thread(self._process_stage_alerts, pdh_res.get("stages", {}), "PDH_PDL", tf)
+                        await asyncio.to_thread(self._process_stage_alerts, pdh_res.get("stages", {}), "PDH_PDL", tf, config)
                 except Exception as e:
                     print(f"⚠️ PDH/PDL Radar check error: {e}")
 
@@ -94,7 +94,7 @@ class StrategyAlertService:
                 try:
                     swing_res = await asyncio.to_thread(run_swing_radar, timeframe=tf, limit_coins=30, swing_lookback=3)
                     if swing_res.get("status") == "success":
-                        await asyncio.to_thread(self._process_stage_alerts, swing_res.get("stages", {}), "SWING_HL", tf)
+                        await asyncio.to_thread(self._process_stage_alerts, swing_res.get("stages", {}), "SWING_HL", tf, config)
                 except Exception as e:
                     print(f"⚠️ Swing Radar check error: {e}")
 
@@ -103,18 +103,13 @@ class StrategyAlertService:
                 try:
                     pat_res = await asyncio.to_thread(run_pattern_radar, timeframe=tf, limit_coins=30)
                     if pat_res.get("status") == "success":
-                        await asyncio.to_thread(self._process_stage_alerts, pat_res.get("stages", {}), "CHART_PATTERNS", tf)
+                        await asyncio.to_thread(self._process_stage_alerts, pat_res.get("stages", {}), "CHART_PATTERNS", tf, config)
                 except Exception as e:
                     print(f"⚠️ Pattern Radar check error: {e}")
 
         await asyncio.to_thread(self._cleanup_old_history)
 
     def _get_setup_identifier(self, coin: Dict[str, Any], strat_type: str, tf: str) -> str:
-        """
-        Her bir işlem döngüsünü benzersiz kılan kimlik (Setup Key).
-        Kırılan seviye + Kırılma zamanı (bo_time) + Parite + Yön kombinasyonu ile üretilir.
-        Aynı kırılma döngüsü içinde asla tekrar alarm üretmez.
-        """
         symbol = coin.get("symbol", "")
         direction = coin.get("direction", "")
         bo_level = coin.get("breakout_level") or coin.get("pdh") or coin.get("pdl") or coin.get("swing_level", 0.0)
@@ -123,51 +118,53 @@ class StrategyAlertService:
 
         return f"{strat_type}_{tf}_{symbol}_{direction}_{bo_level}_{bo_time}"
 
-    def _process_stage_alerts(self, stages: Dict[str, Any], strat_type: str, tf: str):
+    def _process_stage_alerts(self, stages: Dict[str, Any], strat_type: str, tf: str, config: Dict[str, Any]):
         now = time.time()
         updated = False
+        should_notify_retest = config.get("notify_retest", True)
+        should_notify_confirmed = config.get("notify_confirmed", True)
 
-        # A. 2. Aşama: Retesting Yapanlar (Erken Uyarı)
-        for coin in stages.get("retesting", []):
-            setup_id = self._get_setup_identifier(coin, strat_type, tf)
-            record = self.history.get(setup_id, {
-                "retest_sent": False,
-                "confirmed_sent": False,
-                "created_at": now,
-                "last_updated": now
-            })
+        # A. 2. Aşama: Retesting Yapanlar (Erken Uyarı) - SADECE kullanıcı açıksa gönder!
+        if should_notify_retest:
+            for coin in stages.get("retesting", []):
+                setup_id = self._get_setup_identifier(coin, strat_type, tf)
+                record = self.history.get(setup_id, {
+                    "retest_sent": False,
+                    "confirmed_sent": False,
+                    "created_at": now,
+                    "last_updated": now
+                })
 
-            # Bu kurulum için Retest veya Onay alarmı daha önce ATILMADIYSA gönder
-            if not record.get("retest_sent", False) and not record.get("confirmed_sent", False):
-                print(f"📢 [TELEGRAM] 2. Aşama RETEST Alarmı İletiliyor: {coin.get('symbol')} ({strat_type})")
-                success = send_retest_alert(coin, strategy_type=strat_type)
-                if success:
-                    record["retest_sent"] = True
-                    record["retest_time"] = time.strftime("%Y-%m-%d %H:%M:%S")
-                    record["last_updated"] = now
-                    self.history[setup_id] = record
-                    updated = True
+                if not record.get("retest_sent", False) and not record.get("confirmed_sent", False):
+                    print(f"📢 [TELEGRAM] 2. Aşama RETEST Alarmı İletiliyor: {coin.get('symbol')} ({strat_type})")
+                    success = send_retest_alert(coin, strategy_type=strat_type)
+                    if success:
+                        record["retest_sent"] = True
+                        record["retest_time"] = time.strftime("%Y-%m-%d %H:%M:%S")
+                        record["last_updated"] = now
+                        self.history[setup_id] = record
+                        updated = True
 
-        # B. 3. Aşama: Onaylananlar (Kesin Giriş Sinyali)
-        for coin in stages.get("confirmed", []):
-            setup_id = self._get_setup_identifier(coin, strat_type, tf)
-            record = self.history.get(setup_id, {
-                "retest_sent": False,
-                "confirmed_sent": False,
-                "created_at": now,
-                "last_updated": now
-            })
+        # B. 3. Aşama: Onaylananlar (Kesin Giriş Sinyali) - SADECE kullanıcı açıksa gönder!
+        if should_notify_confirmed:
+            for coin in stages.get("confirmed", []):
+                setup_id = self._get_setup_identifier(coin, strat_type, tf)
+                record = self.history.get(setup_id, {
+                    "retest_sent": False,
+                    "confirmed_sent": False,
+                    "created_at": now,
+                    "last_updated": now
+                })
 
-            # Bu kurulum için Onaylandı alarmı daha önce ATILMADIYSA gönder
-            if not record.get("confirmed_sent", False):
-                print(f"🔥 [TELEGRAM] 3. Aşama KESİN GİRİŞ Alarmı İletiliyor: {coin.get('symbol')} ({strat_type})")
-                success = send_confirmed_alert(coin, strategy_type=strat_type)
-                if success:
-                    record["confirmed_sent"] = True
-                    record["confirmed_time"] = time.strftime("%Y-%m-%d %H:%M:%S")
-                    record["last_updated"] = now
-                    self.history[setup_id] = record
-                    updated = True
+                if not record.get("confirmed_sent", False):
+                    print(f"🔥 [TELEGRAM] 3. Aşama KESİN GİRİŞ Alarmı İletiliyor: {coin.get('symbol')} ({strat_type})")
+                    success = send_confirmed_alert(coin, strategy_type=strat_type)
+                    if success:
+                        record["confirmed_sent"] = True
+                        record["confirmed_time"] = time.strftime("%Y-%m-%d %H:%M:%S")
+                        record["last_updated"] = now
+                        self.history[setup_id] = record
+                        updated = True
 
         if updated:
             self._save_history()

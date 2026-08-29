@@ -130,35 +130,45 @@ async function fetchAndRenderBacktest() {
 }
 
 function renderAllResults(data) {
-    const champ = data.champion_strategy;
+    const champ = data.champion_strategy || (data.leaderboard && data.leaderboard[0]);
     const leaderboard = data.leaderboard || [];
 
     // 1. Şampiyon Strateji Afişi
-    const heroSymbolBadge = document.getElementById('heroSymbolBadge');
-    if (heroSymbolBadge) heroSymbolBadge.textContent = `${data.symbol} (${data.timeframe})`;
+    const heroName = document.getElementById('heroStrategyName') || document.getElementById('heroChampName');
+    const heroCat = document.getElementById('heroStrategyCategory') || document.getElementById('heroChampCategory');
+    const heroDesc = document.getElementById('heroStrategyDesc') || document.getElementById('heroChampCategory');
+    const heroWin = document.getElementById('heroWinRate');
+    const heroNet = document.getElementById('heroNetProfit');
+    const heroPf = document.getElementById('heroPF');
+    const heroTrades = document.getElementById('heroTrades');
+    const heroTp1 = document.getElementById('heroTp1Rate');
+    const heroTp2 = document.getElementById('heroTp2Rate');
+    const heroTp3 = document.getElementById('heroTp3Rate');
 
     if (champ) {
-        document.getElementById('heroChampName').textContent = `${champ.name} (${champ.name_en})`;
-        document.getElementById('heroChampCategory').textContent = `${champ.category} • Son ${data.lookback_candles} Mum Boyunca En Çok Kazandıran`;
-        document.getElementById('heroWinRate').textContent = `%${champ.tp2_win_rate || champ.win_rate}`;
-        document.getElementById('heroNetProfit').textContent = `${champ.net_profit_pct > 0 ? '+' : ''}%${champ.net_profit_pct}`;
-        document.getElementById('heroNetProfit').className = champ.net_profit_pct >= 0 ? 'text-lg font-black text-emerald-400 mt-0.5' : 'text-lg font-black text-rose-400 mt-0.5';
-        document.getElementById('heroPF').textContent = `${champ.profit_factor}`;
-        document.getElementById('heroTrades').textContent = `${champ.total_trades} (${champ.wins}W / ${champ.losses}L)`;
-        
-        if (document.getElementById('heroTp1Rate')) document.getElementById('heroTp1Rate').textContent = `%${champ.tp1_win_rate || 0}`;
-        if (document.getElementById('heroTp2Rate')) document.getElementById('heroTp2Rate').textContent = `%${champ.tp2_win_rate || champ.win_rate}`;
-        if (document.getElementById('heroTp3Rate')) document.getElementById('heroTp3Rate').textContent = `%${champ.tp3_win_rate || 0}`;
+        if (heroName) heroName.textContent = `${champ.name} (${champ.name_en || ''})`;
+        if (heroCat) heroCat.textContent = `${champ.category} • Son ${data.lookback_candles || 500} Mum`;
+        if (heroDesc) heroDesc.textContent = `Geçmiş ${data.lookback_candles || 500} mum boyunca en yüksek başarı oranı ve getiri sağlayan şampiyon strateji.`;
+        if (heroWin) heroWin.textContent = `%${champ.tp2_win_rate || champ.win_rate || 0}`;
+        if (heroNet) {
+            heroNet.textContent = `${champ.net_profit_pct > 0 ? '+' : ''}%${champ.net_profit_pct || 0}`;
+            heroNet.className = (champ.net_profit_pct || 0) >= 0 ? 'text-lg font-black text-emerald-400 mt-0.5' : 'text-lg font-black text-rose-400 mt-0.5';
+        }
+        if (heroPf) heroPf.textContent = `${champ.profit_factor || 0.0}`;
+        if (heroTrades) heroTrades.textContent = `${champ.total_trades || 0} (${champ.wins || 0}W / ${champ.losses || 0}L)`;
+        if (heroTp1) heroTp1.textContent = `%${champ.tp1_win_rate || 0}`;
+        if (heroTp2) heroTp2.textContent = `%${champ.tp2_win_rate || champ.win_rate || 0}`;
+        if (heroTp3) heroTp3.textContent = `%${champ.tp3_win_rate || 0}`;
     } else {
-        document.getElementById('heroChampName').textContent = "Yeterli İşlem Örneği Bulunamadı";
-        document.getElementById('heroChampCategory').textContent = "Mum aralığını veya zaman dilimini artırmayı deneyin.";
-        document.getElementById('heroWinRate').textContent = "%0";
-        document.getElementById('heroNetProfit').textContent = "%0";
-        document.getElementById('heroPF').textContent = "0.0";
-        document.getElementById('heroTrades').textContent = "0";
-        if (document.getElementById('heroTp1Rate')) document.getElementById('heroTp1Rate').textContent = "%0";
-        if (document.getElementById('heroTp2Rate')) document.getElementById('heroTp2Rate').textContent = "%0";
-        if (document.getElementById('heroTp3Rate')) document.getElementById('heroTp3Rate').textContent = "%0";
+        if (heroName) heroName.textContent = "Yeterli İşlem Örneği Bulunamadı";
+        if (heroCat) heroCat.textContent = "Mum aralığını veya zaman dilimini artırmayı deneyin.";
+        if (heroWin) heroWin.textContent = "%0";
+        if (heroNet) heroNet.textContent = "%0";
+        if (heroPf) heroPf.textContent = "0.0";
+        if (heroTrades) heroTrades.textContent = "0";
+        if (heroTp1) heroTp1.textContent = "%0";
+        if (heroTp2) heroTp2.textContent = "%0";
+        if (heroTp3) heroTp3.textContent = "%0";
     }
 
     renderLeaderboardRows(leaderboard);

@@ -445,9 +445,16 @@
                         </div>
                     </div>
                 </div>
-                <button onclick="closeRadarChartModal()" class="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition cursor-pointer">
-                    <i data-lucide="x" class="w-5 h-5"></i>
-                </button>
+                
+                <div class="flex items-center gap-2">
+                    <a id="modalBacktestBtn" href="/backtest.html" target="_blank" class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-gray-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 cursor-pointer transition">
+                        <i data-lucide="flask-conical" class="w-4 h-4"></i>
+                        <span>Bu Formasyonu Backtest Yap 🧪</span>
+                    </a>
+                    <button onclick="closeRadarChartModal()" class="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition cursor-pointer">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
             </div>
 
             <!-- Modal Body -->

@@ -423,10 +423,15 @@ async function openRadarChartModal(coin) {
             : 'px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-400 font-bold border border-rose-500/40 text-xs font-mono';
     }
 
-    if (document.getElementById('modalSymbolTitle')) document.getElementById('modalSymbolTitle').textContent = `${coin.symbol} (${coin.timeframe || '1h'})`;
-    if (document.getElementById('modalStageSubtitle')) document.getElementById('modalStageSubtitle').textContent = coin.stage_name;
+    if (document.getElementById('modalSymbolTitle')) document.getElementById('modalSymbolTitle').textContent = coin.symbol;
+    if (document.getElementById('modalStageSubtitle')) {
+        document.getElementById('modalStageSubtitle').textContent = `${coin.strategy_name || ''} • ${coin.stage_name} (${currentRadarTimeframe})`;
+    }
 
-    // Rozetler
+    const modalBacktestBtn = document.getElementById('modalBacktestBtn');
+    if (modalBacktestBtn) {
+        modalBacktestBtn.href = `/backtest.html?symbol=${encodeURIComponent(coin.symbol)}&timeframe=${encodeURIComponent(currentRadarTimeframe)}`;
+    }
     if (document.getElementById('badgePdh')) document.getElementById('badgePdh').textContent = `$${formatPrice(coin.pdh || coin.swing_level || levelPrice)}`;
     if (document.getElementById('badgePdl')) document.getElementById('badgePdl').textContent = `$${formatPrice(coin.pdl || coin.swing_level || levelPrice)}`;
     if (document.getElementById('badgeEntry')) document.getElementById('badgeEntry').textContent = `$${formatPrice(coin.entry_price || coin.current_price)}`;

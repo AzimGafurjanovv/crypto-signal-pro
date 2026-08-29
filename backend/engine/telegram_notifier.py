@@ -88,25 +88,35 @@ def send_retest_alert(coin_data: Dict[str, Any], strategy_type: str = "PDH_PDL")
     retest_time = retest_bar.get("time_str", "Şimdi")
 
     dir_icon = "🟢" if direction == "LONG" else "🔴"
-    strat_title = "📅 PDH / PDL (Dünün Seviyeleri)" if strategy_type == "PDH_PDL" else "🌊 Yapısal Swing High/Low"
-    level_name = "PDH (Dünün Zirvesi)" if (strategy_type == "PDH_PDL" and direction == "LONG") else \
-                 ("PDL (Dünün Dibi)" if strategy_type == "PDH_PDL" else \
-                 ("Swing High" if direction == "LONG" else "Swing Low"))
+    
+    if strategy_type == "PDH_PDL":
+        strat_badge = "📅 1. STRATEJİ: PDH / PDL (Dünün Zirve/Dibi)"
+        header_tag = "[1. STRATEJİ: PDH/PDL]"
+        level_name = "Dünün Zirvesi (PDH)" if direction == "LONG" else "Dünün Dibi (PDL)"
+        strat_desc = "UTC 00:00–24:00 Günlük seviye kırılımı sonrası 0.3xATR retesti yapıldı."
+    else:
+        strat_badge = "🌊 2. STRATEJİ: SWING HIGH / LOW (Yapısal Dönüşler)"
+        header_tag = "[2. STRATEJİ: SWING H/L]"
+        level_name = "Onaylı Swing High" if direction == "LONG" else "Onaylı Swing Low"
+        strat_desc = "Lookback(3) Yapısal dönüş noktası kırılımı sonrası 0.3xATR retesti yapıldı."
 
-    text = f"""<b>⚠️ [CryptoSignalPro] RETEST ERKEN UYARISI!</b> 🎯
+    text = f"""<b>⚠️ {header_tag} RETEST ERKEN UYARISI!</b> 🎯
 
+<b>📐 KULLANILAN STRATEJİ:</b>
+👉 <b>{strat_badge}</b>
+
+━━━━━━━━━━━━━━━━━━━━
 <b>🪙 Parite:</b> <code>{symbol}</code> ({tf})
-<b>📐 Strateji:</b> {strat_title}
 <b>{dir_icon} Yön:</b> <b>{direction}</b>
 <b>📍 Kırılan Seviye ({level_name}):</b> <code>${level_price:,.4f}</code>
 <b>📊 Güncel Fiyat:</b> <code>${curr_price:,.4f}</code>
 <b>⏰ Retest Zamanı:</b> {retest_time}
-
 ━━━━━━━━━━━━━━━━━━━━
-💡 <b>Açıklama:</b> Fiyat kırdığı seviyeye 0.3xATR mesafesinde retest yaptı! 
+
+💡 <b>Durum:</b> {strat_desc}
 ⏳ <i>Sonraki 1-2 bar içinde Hacimli Onay Mumu gelirse KESİN GİRİŞ gerçekleşecektir.</i>
 
-🔗 <a href="http://47.251.110.202/my_strategy.html">Radarda Grafiği Aç</a>"""
+🔗 <a href="http://47.251.110.202/my_strategy.html">Radarda Canlı Grafiği Aç</a>"""
 
     res = send_telegram_raw_message(bot_token, chat_id, text)
     return res.get("status") == "success"
@@ -133,22 +143,31 @@ def send_confirmed_alert(coin_data: Dict[str, Any], strategy_type: str = "PDH_PD
     conf_time = conf_bar.get("time_str", "Şimdi")
 
     dir_icon = "🟢" if direction == "LONG" else "🔴"
-    strat_title = "📅 PDH / PDL (Dünün Seviyeleri)" if strategy_type == "PDH_PDL" else "🌊 Yapısal Swing High/Low"
+    
+    if strategy_type == "PDH_PDL":
+        strat_badge = "📅 1. STRATEJİ: PDH / PDL (Dünün Zirve/Dibi)"
+        header_tag = "[1. STRATEJİ: PDH/PDL]"
+    else:
+        strat_badge = "🌊 2. STRATEJİ: SWING HIGH / LOW (Yapısal Dönüşler)"
+        header_tag = "[2. STRATEJİ: SWING H/L]"
 
-    text = f"""<b>🚀 [CryptoSignalPro] 🔥 KESİN GİRİŞ ONAYLANDI!</b>
+    text = f"""<b>🚀 {header_tag} 🔥 KESİN GİRİŞ ONAYLANDI!</b>
 
-<b>🪙 Parite:</b> <code>{symbol}</code> ({tf})
-<b>📐 Strateji:</b> {strat_title}
-<b>{dir_icon} Sinyal Yönü:</b> <b>{direction}</b>
+<b>📐 KULLANILAN STRATEJİ:</b>
+👉 <b>{strat_badge}</b>
 
 ━━━━━━━━━━━━━━━━━━━━
+<b>🪙 Parite:</b> <code>{symbol}</code> ({tf})
+<b>{dir_icon} Sinyal Yönü:</b> <b>{direction}</b>
+━━━━━━━━━━━━━━━━━━━━
+
 🟡 <b>Giriş Seviyesi (Entry):</b> <code>${entry_price:,.4f}</code>
 🛑 <b>Stop Loss (0.2xATR):</b> <code>${stop_loss:,.4f}</code>
 🎯 <b>Hedef (Dinamik S/R):</b> <code>${take_profit:,.4f}</code>
 ⚖️ <b>Risk / Kazanç (R:R):</b> <code>{rr} R</code>
 ━━━━━━━━━━━━━━━━━━━━
 
-✅ <b>Doğrulama:</b> Retest sonrası Yutan Mum (Engulfing) veya %60+ Gövdeli Mum, 20 SMA üzeri Hacim ile kapandı.
+✅ <b>Onay Kuralı:</b> Retest sonrası Yutan Mum (Engulfing) veya %60+ Gövdeli Mum, 20 SMA üzeri Hacim ile kapandı.
 ⏰ <b>Onay Saati:</b> {conf_time}
 
 🔗 <a href="http://47.251.110.202/my_strategy.html">Grafiği İnteraktif İncele</a>"""

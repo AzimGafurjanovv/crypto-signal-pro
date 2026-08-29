@@ -248,6 +248,19 @@
                     </select>
                 </div>
 
+                <!-- Formasyon Türü Filtresi (Sadece Formasyon Scanner'da Görünür) -->
+                <div id="patternFilterWrapper" class="hidden flex items-center space-x-2">
+                    <label class="text-xs text-amber-400 font-medium">Formasyon:</label>
+                    <select id="patternCategorySelect" class="bg-gray-950 border border-amber-700/60 rounded-xl px-3 py-2 text-xs font-mono text-amber-300 focus:outline-none focus:border-amber-500 transition">
+                        <option value="ALL" selected>🌟 Tümü (10 Formasyon)</option>
+                        <option value="TRENDLINE">📈 Trend Çizgileri</option>
+                        <option value="TRIANGLE">📐 Üçgen & Flamalar</option>
+                        <option value="SR_FLIP">🔄 S/R Flip Retest</option>
+                        <option value="RANGE">📊 Range & Sapma</option>
+                        <option value="DOUBLE_TOP_BOTTOM">🇼 İkili Dip (W) / Tepe</option>
+                    </select>
+                </div>
+
                 <!-- Yön Filtresi -->
                 <div class="flex items-center space-x-2">
                     <label class="text-xs text-gray-400 font-medium">Yön:</label>
@@ -558,7 +571,7 @@
 
                 <!-- Alarm Türleri Seçimi -->
                 <div class="space-y-2 pt-2 border-t border-gray-800">
-                    <div class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Gönderilecek Bildirim Türleri:</div>
+                    <div class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Gönderilecek Bildirim Aşamaları:</div>
                     
                     <label class="flex items-center gap-3 p-2.5 rounded-xl bg-gray-950/60 border border-emerald-500/30 cursor-pointer hover:bg-gray-950">
                         <input type="checkbox" id="tgConfirmedToggle" checked class="w-4 h-4 text-emerald-500 rounded bg-gray-900 border-gray-700 focus:ring-0">
@@ -569,12 +582,48 @@
                     </label>
 
                     <label class="flex items-center gap-3 p-2.5 rounded-xl bg-gray-950/60 border border-amber-500/30 cursor-pointer hover:bg-gray-950">
-                        <input type="checkbox" id="tgRetestToggle" checked class="w-4 h-4 text-amber-500 rounded bg-gray-900 border-gray-700 focus:ring-0">
+                        <input type="checkbox" id="tgRetestToggle" class="w-4 h-4 text-amber-500 rounded bg-gray-900 border-gray-700 focus:ring-0">
                         <div>
                             <div class="font-bold text-amber-400">🎯 2. Aşama: RETEST YAPANLAR (Erken Uyarı Alarmı)</div>
-                            <div class="text-[10px] text-gray-400">Fiyat 0.3xATR toleransla seviyeyi test ettiğinde hazır olmanız için alarm verir.</div>
+                            <div class="text-[10px] text-gray-400">Fiyat 0.3xATR toleransla seviyeyi test ettiğinde alarm verir.</div>
                         </div>
                     </label>
+                </div>
+
+                <!-- Formasyon Bildirim Filtresi -->
+                <div class="space-y-2 pt-2 border-t border-gray-800">
+                    <div class="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <i data-lucide="shapes" class="w-3.5 h-3.5"></i>
+                        <span>Telegram'a Gelecek Formasyonları Seçin:</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-[11px]">
+                        <label class="flex items-center gap-2 p-2 rounded-xl bg-gray-950/60 border border-gray-800 cursor-pointer hover:border-gray-700 text-gray-300">
+                            <input type="checkbox" id="tgPatTrendline" checked class="w-3.5 h-3.5 text-sky-500 rounded bg-gray-900 border-gray-700">
+                            <span>📈 Trend Çizgileri</span>
+                        </label>
+                        <label class="flex items-center gap-2 p-2 rounded-xl bg-gray-950/60 border border-gray-800 cursor-pointer hover:border-gray-700 text-gray-300">
+                            <input type="checkbox" id="tgPatTriangle" checked class="w-3.5 h-3.5 text-sky-500 rounded bg-gray-900 border-gray-700">
+                            <span>📐 Üçgen & Flama</span>
+                        </label>
+                        <label class="flex items-center gap-2 p-2 rounded-xl bg-gray-950/60 border border-gray-800 cursor-pointer hover:border-gray-700 text-gray-300">
+                            <input type="checkbox" id="tgPatSrFlip" checked class="w-3.5 h-3.5 text-sky-500 rounded bg-gray-900 border-gray-700">
+                            <span>🔄 S/R Flip Retest</span>
+                        </label>
+                        <label class="flex items-center gap-2 p-2 rounded-xl bg-gray-950/60 border border-gray-800 cursor-pointer hover:border-gray-700 text-gray-300">
+                            <input type="checkbox" id="tgPatRange" checked class="w-3.5 h-3.5 text-sky-500 rounded bg-gray-900 border-gray-700">
+                            <span>📊 Range & Sapma</span>
+                        </label>
+                        <label class="flex items-center gap-2 p-2 rounded-xl bg-gray-950/60 border border-gray-800 cursor-pointer hover:border-gray-700 text-gray-300 col-span-2">
+                            <input type="checkbox" id="tgPatDouble" checked class="w-3.5 h-3.5 text-sky-500 rounded bg-gray-900 border-gray-700">
+                            <span>🇼 İkili Dip (W) & 🇲 İkili Tepe (M)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Tazelik Koruması Rozeti -->
+                <div class="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300 flex items-center gap-2 font-mono">
+                    <i data-lucide="shield-check" class="w-4 h-4 text-emerald-400 shrink-0"></i>
+                    <span>🛡️ <b>Tazelik Koruması Aktif:</b> Sadece son 1-2 saat içindeki yeni canlı sinyaller gönderilir, geçmiş eski sinyaller engellenir.</span>
                 </div>
 
                 <!-- Kolay Yardım Kutusu -->

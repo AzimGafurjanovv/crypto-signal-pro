@@ -685,10 +685,11 @@ class TelegramSettingsRequest(BaseModel):
     enabled: bool = True
     bot_token: str
     chat_id: str
-    notify_retest: bool = True
+    notify_retest: bool = False
     notify_confirmed: bool = True
     timeframes: List[str] = ["1h"]
-    strategies: List[str] = ["PDH_PDL", "SWING_HL"]
+    strategies: List[str] = ["PDH_PDL", "SWING_HL", "CHART_PATTERNS"]
+    enabled_patterns: List[str] = ["ALL"]
 
 @app.get("/api/telegram/settings")
 async def get_telegram_settings():
@@ -720,7 +721,8 @@ async def save_telegram_settings_api(req: TelegramSettingsRequest):
         "notify_retest": req.notify_retest,
         "notify_confirmed": req.notify_confirmed,
         "timeframes": req.timeframes or ["1h"],
-        "strategies": req.strategies or ["PDH_PDL", "SWING_HL"]
+        "strategies": req.strategies or ["PDH_PDL", "SWING_HL", "CHART_PATTERNS"],
+        "enabled_patterns": req.enabled_patterns or ["ALL"]
     }
     saved = save_telegram_config(config)
     if not saved:

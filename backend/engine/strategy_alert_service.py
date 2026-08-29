@@ -24,6 +24,7 @@ HISTORY_FILE = os.path.join(DATA_DIR, "alert_history.json")
 class StrategyAlertService:
     def __init__(self):
         self.is_running: bool = False
+        self.is_warmed_up: bool = False
         self.interval_seconds: int = 60 # Her 60 saniyede bir tara
         self.history: Dict[str, Dict[str, Any]] = self._load_history()
 
@@ -48,9 +49,9 @@ class StrategyAlertService:
             print(f"❌ Alert history kaydetme hatası: {e}")
 
     def _cleanup_old_history(self):
-        """3 günden eski tamamlanmış veya aktif olmayan kayıtları temizler."""
+        """2 günden eski kayıtları temizler."""
         now = time.time()
-        max_age = 86400 * 3 # 3 gün
+        max_age = 86400 * 2
         keys_to_delete = []
         for k, v in self.history.items():
             last_ts = v.get("last_updated", 0)
@@ -63,19 +64,31 @@ class StrategyAlertService:
 
     async def start_loop(self):
         self.is_running = True
-        print("🔔 [TELEGRAM RADAR SERVICE] Akıllı Anti-Spam Alarm Servisi Başlatıldı.")
+        print("🔔 [TELEGRAM RADAR SERVICE] Akıllı Anti-Spam & Tazelik Filtreli Alarm Servisi Başlatıldı.")
         
+        # 1. Başlangıçta sessiz ısınma (Eski sinyalleri spam olarak göndermeyi engeller)
+        try:
+            config = load_telegram_config()
+            if config.get("enabled", False):
+                print("⏳ [TELEGRAM] Başlangıç ısınması yapılıyor (Eski sinyaller önbelleğe alınıyor)...")
+                await self.check_and_notify_radars(config, is_warmup=True)
+                self.is_warmed_up = True
+                print("✅ [TELEGRAM] Başlangıç ısınması tamamlandı. Yalnızca YENİ CANLI sinyaller iletilecektir.")
+        except Exception as e:
+            print(f"⚠️ Isınma hatası: {e}")
+            self.is_warmed_up = True
+
         while self.is_running:
             try:
                 config = load_telegram_config()
                 if config.get("enabled", False) and (config.get("notify_retest") or config.get("notify_confirmed")):
-                    await self.check_and_notify_radars(config)
+                    await self.check_and_notify_radars(config, is_warmup=False)
             except Exception as e:
                 print(f"⚠️ [TELEGRAM RADAR SERVICE] Hata: {e}")
                 
             await asyncio.sleep(self.interval_seconds)
 
-    async def check_and_notify_radars(self, config: Dict[str, Any]):
+    async def check_and_notify_radars(self, config: Dict[str, Any], is_warmup: bool = False):
         timeframes = config.get("timeframes", ["1h"])
         strategies = config.get("strategies", ["PDH_PDL", "SWING_HL", "CHART_PATTERNS"])
 
@@ -85,7 +98,7 @@ class StrategyAlertService:
                 try:
                     pdh_res = await asyncio.to_thread(run_pdh_pdl_radar, timeframe=tf, limit_coins=30)
                     if pdh_res.get("status") == "success":
-                        await asyncio.to_thread(self._process_stage_alerts, pdh_res.get("stages", {}), "PDH_PDL", tf, config)
+                        await asyncio.to_thread(self._process_stage_alerts, pdh_res.get("stages", {}), "PDH_PDL", tf, config, is_warmup)
                 except Exception as e:
                     print(f"⚠️ PDH/PDL Radar check error: {e}")
 
@@ -94,16 +107,16 @@ class StrategyAlertService:
                 try:
                     swing_res = await asyncio.to_thread(run_swing_radar, timeframe=tf, limit_coins=30, swing_lookback=3)
                     if swing_res.get("status") == "success":
-                        await asyncio.to_thread(self._process_stage_alerts, swing_res.get("stages", {}), "SWING_HL", tf, config)
+                        await asyncio.to_thread(self._process_stage_alerts, swing_res.get("stages", {}), "SWING_HL", tf, config, is_warmup)
                 except Exception as e:
                     print(f"⚠️ Swing Radar check error: {e}")
 
-            # 3. Strateji: Formasyon Radarı (Trendline, Üçgen, S/R Flip, İkili Dip)
+            # 3. Strateji: Formasyon Radarı
             if "CHART_PATTERNS" in strategies:
                 try:
                     pat_res = await asyncio.to_thread(run_pattern_radar, timeframe=tf, limit_coins=30)
                     if pat_res.get("status") == "success":
-                        await asyncio.to_thread(self._process_stage_alerts, pat_res.get("stages", {}), "CHART_PATTERNS", tf, config)
+                        await asyncio.to_thread(self._process_stage_alerts, pat_res.get("stages", {}), "CHART_PATTERNS", tf, config, is_warmup)
                 except Exception as e:
                     print(f"⚠️ Pattern Radar check error: {e}")
 
@@ -115,18 +128,31 @@ class StrategyAlertService:
         bo_level = coin.get("breakout_level") or coin.get("pdh") or coin.get("pdl") or coin.get("swing_level", 0.0)
         bo_bar = coin.get("breakout_bar", {})
         bo_time = bo_bar.get("time_str") or bo_bar.get("iso_time") or str(bo_bar.get("timestamp", ""))
+        pat_name = coin.get("strategy_name", "")
 
-        return f"{strat_type}_{tf}_{symbol}_{direction}_{bo_level}_{bo_time}"
+        return f"{strat_type}_{tf}_{symbol}_{direction}_{bo_level}_{bo_time}_{pat_name}"
 
-    def _process_stage_alerts(self, stages: Dict[str, Any], strat_type: str, tf: str, config: Dict[str, Any]):
+    def _process_stage_alerts(self, stages: Dict[str, Any], strat_type: str, tf: str, config: Dict[str, Any], is_warmup: bool = False):
         now = time.time()
         updated = False
-        should_notify_retest = config.get("notify_retest", True)
+        should_notify_retest = config.get("notify_retest", False)
         should_notify_confirmed = config.get("notify_confirmed", True)
+        enabled_patterns = config.get("enabled_patterns", ["ALL"]) # Formasyon filtre listesi
 
-        # A. 2. Aşama: Retesting Yapanlar (Erken Uyarı) - SADECE kullanıcı açıksa gönder!
+        # A. 2. Aşama: Retesting Yapanlar (Erken Uyarı)
         if should_notify_retest:
             for coin in stages.get("retesting", []):
+                # Formasyon filtresi kontrolü
+                if strat_type == "CHART_PATTERNS" and "ALL" not in enabled_patterns:
+                    pat_cat = coin.get("pattern_category", "TRENDLINE")
+                    if pat_cat not in enabled_patterns:
+                        continue
+
+                # Tazelik Filtresi (Son 2 saat = 7200 sn içinde olmalı)
+                rt_ts = coin.get("retest_bar", {}).get("timestamp", 0)
+                if rt_ts > 0 and (now - rt_ts) > 7200:
+                    continue # Eski bar, bildirim atma
+
                 setup_id = self._get_setup_identifier(coin, strat_type, tf)
                 record = self.history.get(setup_id, {
                     "retest_sent": False,
@@ -134,6 +160,12 @@ class StrategyAlertService:
                     "created_at": now,
                     "last_updated": now
                 })
+
+                if is_warmup:
+                    record["retest_sent"] = True
+                    self.history[setup_id] = record
+                    updated = True
+                    continue
 
                 if not record.get("retest_sent", False) and not record.get("confirmed_sent", False):
                     print(f"📢 [TELEGRAM] 2. Aşama RETEST Alarmı İletiliyor: {coin.get('symbol')} ({strat_type})")
@@ -145,9 +177,20 @@ class StrategyAlertService:
                         self.history[setup_id] = record
                         updated = True
 
-        # B. 3. Aşama: Onaylananlar (Kesin Giriş Sinyali) - SADECE kullanıcı açıksa gönder!
+        # B. 3. Aşama: Onaylananlar (Kesin Giriş Sinyali)
         if should_notify_confirmed:
             for coin in stages.get("confirmed", []):
+                # Formasyon filtresi kontrolü
+                if strat_type == "CHART_PATTERNS" and "ALL" not in enabled_patterns:
+                    pat_cat = coin.get("pattern_category", "TRENDLINE")
+                    if pat_cat not in enabled_patterns:
+                        continue
+
+                # Tazelik Filtresi (Son 2 saat = 7200 sn içinde olmalı)
+                conf_ts = coin.get("confirmed_bar", {}).get("timestamp", 0)
+                if conf_ts > 0 and (now - conf_ts) > 7200:
+                    continue # Eski bar, bildirim atma
+
                 setup_id = self._get_setup_identifier(coin, strat_type, tf)
                 record = self.history.get(setup_id, {
                     "retest_sent": False,
@@ -155,6 +198,12 @@ class StrategyAlertService:
                     "created_at": now,
                     "last_updated": now
                 })
+
+                if is_warmup:
+                    record["confirmed_sent"] = True
+                    self.history[setup_id] = record
+                    updated = True
+                    continue
 
                 if not record.get("confirmed_sent", False):
                     print(f"🔥 [TELEGRAM] 3. Aşama KESİN GİRİŞ Alarmı İletiliyor: {coin.get('symbol')} ({strat_type})")

@@ -137,13 +137,26 @@ def evaluate_pattern_strategy_exact(symbol: str, df: pd.DataFrame, timeframe: st
         }
     ]
 
-    explanation = f"📐 <b>{pat_name}</b>: {pat.get('description', '')}"
+    raw_cat = pat.get('category', '')
+    if 'Trend' in raw_cat:
+        pat_cat = 'TRENDLINE'
+    elif 'Üçgen' in raw_cat or 'Pennant' in raw_cat or 'Triangle' in raw_cat:
+        pat_cat = 'TRIANGLE'
+    elif 'S/R' in raw_cat or 'Flip' in raw_cat:
+        pat_cat = 'SR_FLIP'
+    elif 'Range' in raw_cat:
+        pat_cat = 'RANGE'
+    elif 'Double' in raw_cat or 'İkili' in raw_cat:
+        pat_cat = 'DOUBLE_TOP_BOTTOM'
+    else:
+        pat_cat = 'TRENDLINE'
 
     return {
         "status": "success",
         "symbol": symbol,
         "timeframe": timeframe,
         "strategy_name": pat_name,
+        "pattern_category": pat_cat,
         "stage": stage,
         "stage_name": stage_name,
         "direction": direction,
@@ -155,7 +168,7 @@ def evaluate_pattern_strategy_exact(symbol: str, df: pd.DataFrame, timeframe: st
         "tp1": target,
         "risk_reward": f"1:{rr_ratio}",
         "atr": current_atr,
-        "breakout_bar": {'time_str': 'Son Barlar', 'price': breakout_level},
+        "breakout_bar": {'time_str': 'Son Barlar', 'price': breakout_level, 'timestamp': int(time.time())},
         "retest_bar": retest_bar,
         "confirmed_bar": confirmed_bar,
         "checklist": checklist,

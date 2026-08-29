@@ -32,6 +32,11 @@ document.addEventListener('DOMContentLoaded', () => {
         swingLookback.addEventListener('change', () => fetchActiveRadarData(false));
     }
 
+    const patternCatSelect = document.getElementById('patternCategorySelect');
+    if (patternCatSelect) {
+        patternCatSelect.addEventListener('change', () => applyRadarFiltersAndRender());
+    }
+
     if (dirFilter) {
         dirFilter.addEventListener('change', () => applyRadarFiltersAndRender());
     }
@@ -77,6 +82,7 @@ function switchStrategy(newStrat) {
     const tabPattern = document.getElementById('tabPatternBtn');
     const swingWrapper = document.getElementById('swingLookbackWrapper');
     const patternGuide = document.getElementById('patternGuideWrapper');
+    const patternFilter = document.getElementById('patternFilterWrapper');
     const heroBadge = document.getElementById('heroStrategyBadge');
     const heroSub = document.getElementById('heroStrategySub');
     const heroTitle = document.getElementById('heroStrategyTitle');
@@ -89,6 +95,7 @@ function switchStrategy(newStrat) {
     if (tabPattern) tabPattern.className = inactiveClass;
     if (swingWrapper) swingWrapper.classList.add('hidden');
     if (patternGuide) patternGuide.classList.add('hidden');
+    if (patternFilter) patternFilter.classList.add('hidden');
 
     if (activeStrategy === 'PDH_PDL') {
         if (tabPdh) tabPdh.className = "flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-md shadow-cyan-600/20 cursor-pointer";
@@ -106,6 +113,7 @@ function switchStrategy(newStrat) {
     } else { // CHART_PATTERNS
         if (tabPattern) tabPattern.className = "flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-md shadow-amber-500/20 cursor-pointer";
         if (patternGuide) patternGuide.classList.remove('hidden');
+        if (patternFilter) patternFilter.classList.remove('hidden');
         if (heroBadge) heroBadge.textContent = "📐 3. STRATEJİ (FORMASYON SCANNER)";
         if (heroSub) heroSub.textContent = "10 Klasik & Modern Formasyon Motoru";
         if (heroTitle) heroTitle.textContent = "Klasik & Modern Grafik Formasyonları Radarı";
@@ -212,10 +220,15 @@ function applyRadarFiltersAndRender() {
     if (!currentRadarData || !currentRadarData.stages) return;
 
     const dirFilter = document.getElementById('directionFilter') ? document.getElementById('directionFilter').value : 'ALL';
+    const patCatFilter = document.getElementById('patternCategorySelect') ? document.getElementById('patternCategorySelect').value : 'ALL';
     const query = document.getElementById('coinSearchInput') ? document.getElementById('coinSearchInput').value.trim().toLowerCase() : '';
 
     const filterFn = (item) => {
         if (dirFilter !== 'ALL' && item.direction !== dirFilter) return false;
+        if (activeStrategy === 'CHART_PATTERNS' && patCatFilter !== 'ALL') {
+            const itemCat = item.pattern_category || 'TRENDLINE';
+            if (itemCat !== patCatFilter) return false;
+        }
         if (query && !item.symbol.toLowerCase().includes(query)) return false;
         return true;
     };

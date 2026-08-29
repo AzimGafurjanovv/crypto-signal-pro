@@ -20,8 +20,22 @@ async function loadTelegramSettings() {
             if (tokenInput && cfg.masked_token) tokenInput.value = cfg.masked_token;
             if (chatIdInput && cfg.chat_id) chatIdInput.value = cfg.chat_id;
             if (enabledToggle) enabledToggle.checked = cfg.enabled;
-            if (retestToggle) retestToggle.checked = cfg.notify_retest;
-            if (confirmedToggle) confirmedToggle.checked = cfg.notify_confirmed;
+            if (retestToggle) retestToggle.checked = Boolean(cfg.notify_retest);
+            if (confirmedToggle) confirmedToggle.checked = Boolean(cfg.notify_confirmed);
+
+            const ep = cfg.enabled_patterns || ["ALL"];
+            const isAll = ep.includes("ALL");
+            const patTl = document.getElementById('tgPatTrendline');
+            const patTri = document.getElementById('tgPatTriangle');
+            const patSr = document.getElementById('tgPatSrFlip');
+            const patRng = document.getElementById('tgPatRange');
+            const patDbl = document.getElementById('tgPatDouble');
+
+            if (patTl) patTl.checked = isAll || ep.includes("TRENDLINE");
+            if (patTri) patTri.checked = isAll || ep.includes("TRIANGLE");
+            if (patSr) patSr.checked = isAll || ep.includes("SR_FLIP");
+            if (patRng) patRng.checked = isAll || ep.includes("RANGE");
+            if (patDbl) patDbl.checked = isAll || ep.includes("DOUBLE_TOP_BOTTOM");
 
             if (statusBadge) {
                 if (cfg.enabled && cfg.has_token && cfg.chat_id) {
@@ -61,6 +75,14 @@ async function saveTelegramSettings() {
 
     if (!tokenInput || !chatIdInput) return;
 
+    const selectedPatterns = [];
+    if (document.getElementById('tgPatTrendline')?.checked) selectedPatterns.push("TRENDLINE");
+    if (document.getElementById('tgPatTriangle')?.checked) selectedPatterns.push("TRIANGLE");
+    if (document.getElementById('tgPatSrFlip')?.checked) selectedPatterns.push("SR_FLIP");
+    if (document.getElementById('tgPatRange')?.checked) selectedPatterns.push("RANGE");
+    if (document.getElementById('tgPatDouble')?.checked) selectedPatterns.push("DOUBLE_TOP_BOTTOM");
+    if (selectedPatterns.length === 5) selectedPatterns.push("ALL");
+
     const payload = {
         enabled: Boolean(enabledToggle && enabledToggle.checked),
         bot_token: tokenInput.value.trim(),
@@ -68,7 +90,8 @@ async function saveTelegramSettings() {
         notify_retest: Boolean(retestToggle && retestToggle.checked),
         notify_confirmed: Boolean(confirmedToggle && confirmedToggle.checked),
         timeframes: ["1h", "15m", "4h"],
-        strategies: ["PDH_PDL", "SWING_HL", "CHART_PATTERNS"]
+        strategies: ["PDH_PDL", "SWING_HL", "CHART_PATTERNS"],
+        enabled_patterns: selectedPatterns.length > 0 ? selectedPatterns : ["ALL"]
     };
 
     if (!payload.bot_token || !payload.chat_id) {

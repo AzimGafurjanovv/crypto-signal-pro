@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="tr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CryptoSignalPro AI - Kripto Sinyal, Formasyon & MTF Setup Bulucu</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- TradingView Lightweight Charts v4 -->
+    <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            900: '#1e1b4b',
+                        },
+                        dark: {
+                            bg: '#080c14',
+                            card: '#0f172a',
+                            border: '#1e293b',
+                            hover: '#1e293b'
+                        },
+                        bull: '#10b981',
+                        bear: '#ef4444'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-[#080c14] text-gray-100 min-h-screen flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+
+    <!-- ÜST NAVBAR -->
+    <header class="border-b border-gray-800/80 bg-gray-900/80 backdrop-blur-xl sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                    <i data-lucide="zap" class="w-6 h-6 text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold bg-gradient-to-r from-white via-gray-200 to-indigo-400 bg-clip-text text-transparent">
+                        CryptoSignalPro <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 font-semibold border border-indigo-500/30">AI v4.1 Pro</span>
+                    </h1>
+                    <p class="text-xs text-gray-400 hidden sm:block">Çift Dilli (TR / EN) Strateji, Dinamik Sıralama & MTF Trend Analizi</p>
+                </div>
+            </div>
+
+            <!-- Canlı Bağlantı & Otomatik Güncelleme & AI Ayarları & Saat -->
+            <div class="flex items-center space-x-2.5 flex-wrap justify-end gap-y-2">
+                
+                <!-- 🕒 Son Güncelleme Saati & Canlı Geri Sayım Rozeti -->
+                <div id="lastUpdateBadge" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-800/90 border border-gray-700 text-gray-300 text-xs font-mono shadow-sm">
+                    <i data-lucide="clock" class="w-3.5 h-3.5 text-cyan-400"></i>
+                    <span>Son Güncelleme: <b id="lastUpdateTimeText" class="text-white">Yükleniyor...</b></span>
+                    <span id="nextUpdateCountdownWrapper" class="text-[10px] text-cyan-400/90 font-bold">(<span id="nextUpdateCountdownText">05:00</span>)</span>
+                </div>
+
+                <!-- 🔄 Otomatik Güncelleme Aralığı Seçici -->
+                <div class="flex items-center gap-1">
+                    <select id="autoRefreshIntervalSelect" title="Otomatik Piyasa Yenileme Sıklığı" class="bg-gray-800/90 border border-gray-700 rounded-xl px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500 font-medium cursor-pointer">
+                        <option value="1">Her 1 Dk</option>
+                        <option value="3">Her 3 Dk</option>
+                        <option value="5" selected>Her 5 Dk (Varsayılan)</option>
+                        <option value="10">Her 10 Dk</option>
+                        <option value="15">Her 15 Dk</option>
+                        <option value="0">Manuel (Oto-Kapalı)</option>
+                    </select>
+                </div>
+
+                <!-- ⭐ ÖZEL STRATEJİM RADARI (PDH / PDL) -->
+                <a href="/my_strategy.html" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600/80 to-blue-600/80 hover:from-cyan-600 hover:to-blue-600 border border-cyan-500/40 text-white text-xs font-bold transition shadow-md shadow-cyan-600/20 active:scale-95">
+                    <i data-lucide="crosshair" class="w-3.5 h-3.5 text-cyan-300"></i>
+                    <span>Özel Stratejim Radarı</span>
+                </a>
+
+                <!-- 🧪 BACKTEST LAB BUTONU -->
+                <a href="/backtest.html" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-bold transition">
+                    <i data-lucide="flask-conical" class="w-3.5 h-3.5 text-amber-400"></i>
+                    <span>Backtest Lab</span>
+                </a>
+
+                <!-- 💬 AI CHAT & ASİSTAN BUTONU (Her Zaman Tekrar Açabilmek İçin) -->
+                <button id="openAiChatHeaderBtn" onclick="toggleOrOpenAiChatDrawer()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600/80 to-purple-600/80 hover:from-indigo-600 hover:to-purple-600 border border-indigo-500/40 text-white text-xs font-bold transition shadow-md shadow-indigo-600/20 active:scale-95">
+                    <i data-lucide="bot" class="w-3.5 h-3.5 text-yellow-300"></i>
+                    <span>AI Chat</span>
+                </button>
+
+                <button id="openGeminiSettingsBtn" onclick="openGeminiModal()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 text-xs font-semibold transition">
+                    <i data-lucide="sparkles" class="w-3.5 h-3.5 text-indigo-400"></i>
+                    <span>Gemini AI</span>
+                    <span id="geminiStatusDot" class="w-2 h-2 rounded-full bg-gray-500"></span>
+                </button>
+
+                <div class="hidden lg:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span class="font-medium">Binance Canlı</span>
+                </div>
+                <div id="liveClock" class="text-xs text-gray-400 font-mono hidden xl:block">00:00:00</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- ANA İÇERİK -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
+
+        <!-- KONTROL & FİLTRELEME PANELİ -->
+        <section class="bg-gray-900/70 border border-gray-800 rounded-2xl p-5 backdrop-blur-md shadow-xl shadow-black/40 space-y-4">
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                
+                <!-- 🔍 1. COİN İSMİNDEN ARAMA ÇUBUĞU (Long/Short Fark Etmeksizin) -->
+                <div class="md:col-span-2 space-y-1.5">
+                    <label class="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+                        <i data-lucide="search" class="w-3.5 h-3.5 text-emerald-400"></i> Coin Ara (Search Symbol - Long / Short)
+                    </label>
+                    <div class="relative">
+                        <input id="symbolSearchInput" type="search" name="search_crypto_sym_no_autofill" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-form-type="other" data-lpignore="true" data-1p-ignore="true" placeholder="Coin adı yazın (örn: TRX, BTC, SOL)..." class="w-full bg-gray-800/90 border border-gray-700 rounded-xl pl-9 pr-8 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 transition">
+                        <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3 top-3"></i>
+                        <button id="clearSearchBtn" class="hidden absolute right-2.5 top-2.5 p-1 rounded-md text-gray-400 hover:text-white hover:bg-gray-700">
+                            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 2. STRATEJİ VE FORMASYON FİLTRESİ (ÇİFT DİLLİ TR / EN) -->
+                <div class="space-y-1.5">
+                    <label class="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+                        <i data-lucide="target" class="w-3.5 h-3.5 text-indigo-400"></i> Strateji Filtresi (Strategy Filter)
+                    </label>
+                    <select id="strategySelect" class="w-full bg-gray-800/90 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-200 focus:outline-none focus:border-indigo-500 transition">
+                        <option value="ALL" selected>Tüm Stratejiler (All Strategies)</option>
+                        <option value="PDH">⭐ 6. Önceki Gün Zirve/Dip Kırılımı (PDH/PDL) (Benim)</option>
+                        <option value="Trend Çizgisi">1. Trend Kırılımı (Trendline Breakout)</option>
+                        <option value="Simetrik">2. Simetrik Üçgen (Symmetrical Triangle)</option>
+                        <option value="S/R Flip">3. S/R Flip Retest (Direnç/Destek Dönüşümü)</option>
+                        <option value="Range">4. Range Kırılımı (Range Breakout / Deviation)</option>
+                        <option value="Double">5. Double Bottom W / Top M (İkili Dip / Tepe)</option>
+                        <option value="Order Block">SMC Emir Bloğu (Order Block)</option>
+                        <option value="FVG">SMC Dengesizlik (Fair Value Gap - FVG)</option>
+                        <option value="Likidite">SMC Likidite Avı (Liquidity Sweep)</option>
+                        <option value="Uyumsuzluk">RSI Uyumsuzluk (RSI Divergence)</option>
+                        <option value="EMA">EMA Boğa / Ayı Hizalaması (EMA Ribbon)</option>
+                    </select>
+                </div>
+
+                <!-- 3. SIRALAMA SEÇENEĞİ (SORT BY) -->
+                <div class="space-y-1.5">
+                    <label class="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+                        <i data-lucide="arrow-up-down" class="w-3.5 h-3.5 text-amber-400"></i> Sıralama (Sort By)
+                    </label>
+                    <select id="sortBySelect" class="w-full bg-gray-800/90 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-amber-300 font-semibold focus:outline-none focus:border-amber-500 transition">
+                        <option value="CONF_DESC" selected>⬆️ Güven: Yüksekten Düşüğe (Score: High → Low)</option>
+                        <option value="CONF_ASC">⬇️ Güven: Düşükten Yükseğe (Score: Low → High)</option>
+                        <option value="RR_DESC">🚀 En Yüksek R:R Oranı (Highest R:R Ratio)</option>
+                        <option value="CHANGE_DESC">📈 24s Değişim: En Çok Artan (Top Gainers)</option>
+                        <option value="CHANGE_ASC">📉 24s Değişim: En Çok Düşen (Top Losers)</option>
+                        <option value="SYMBOL_ASC">🔤 Sembol: Alfabetik (A-Z)</option>
+                    </select>
+                </div>
+
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end pt-1 border-t border-gray-800/60">
+                
+                <!-- 4. İşlem Yönü -->
+                <div class="space-y-1.5">
+                    <label class="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+                        <i data-lucide="compass" class="w-3.5 h-3.5 text-indigo-400"></i> İşlem Yönü (Direction)
+                    </label>
+                    <select id="directionSelect" class="w-full bg-gray-800/90 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-200 focus:outline-none focus:border-indigo-500 transition">
+                        <option value="ALL" selected>Tümü (Long & Short)</option>
+                        <option value="LONG">🟢 Sadece Long (Long Only)</option>
+                        <option value="SHORT">🔴 Sadece Short (Short Only)</option>
+                    </select>
+                </div>
+
+                <!-- 5. Zaman Dilimi -->
+                <div class="space-y-1.5">
+                    <label class="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+                        <i data-lucide="clock" class="w-3.5 h-3.5 text-indigo-400"></i> Zaman Dilimi (Timeframe)
+                    </label>
+                    <select id="timeframeSelect" class="w-full bg-gray-800/90 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-200 focus:outline-none focus:border-indigo-500 transition">
+                        <option value="15m">15 Dakika (15m - Scalp)</option>
+                        <option value="1h" selected>1 Saat (1h - Önerilen)</option>
+                        <option value="4h">4 Saat (4h - Swing)</option>
+                        <option value="1d">1 Gün (1d - Makro Trend)</option>
+                    </select>
+                </div>
+
+                <!-- 6. Gösterilecek Coin Sayısı (İlk Açılışta 10, Max 50) -->
+                <div class="space-y-1.5">
+                    <label class="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+                        <i data-lucide="layers" class="w-3.5 h-3.5 text-indigo-400"></i> Gösterilecek Coin (Max 50)
+                    </label>
+                    <select id="limitCoinsSelect" class="w-full bg-gray-800/90 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-200 focus:outline-none focus:border-indigo-500 transition">
+                        <option value="10" selected>10 Coin (Hızlı / Fast - Varsayılan)</option>
+                        <option value="20">20 Coin</option>
+                        <option value="30">30 Coin</option>
+                        <option value="40">40 Coin</option>
+                        <option value="50">50 Coin (Maksimum / Max)</option>
+                    </select>
+                </div>
+
+                <!-- 7. MİN GÜVENLİK FİLTRESİ (AÇILIP KAPATILABİLİR TOGGLE & SLIDER) -->
+                <div class="space-y-1.5 bg-gray-950/60 p-2.5 rounded-xl border border-gray-800/80">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-semibold text-gray-300 flex items-center gap-1.5 cursor-pointer">
+                            <input type="checkbox" id="enableMinConfidenceToggle" class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 bg-gray-800 border-gray-700 accent-indigo-500 cursor-pointer">
+                            <span>Min Güvenlik Filtresi</span>
+                        </label>
+                        <span id="minConfidenceVal" class="text-xs font-bold text-gray-400">Kapalı (Tümü)</span>
+                    </div>
+                    <div id="sliderWrapper" class="opacity-40 transition-opacity">
+                        <input id="minConfidenceRange" type="range" min="1" max="95" value="50" step="1" disabled class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-not-allowed accent-indigo-500">
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- TARAMAYI BAŞLAT BUTONU -->
+            <div class="pt-2">
+                <button id="scanBtn" class="w-full h-[44px] bg-gradient-to-r from-indigo-600 via-indigo-500 to-emerald-500 hover:from-indigo-500 hover:to-emerald-400 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-600/30 hover:shadow-indigo-500/50 flex items-center justify-center gap-2 transition-all transform active:scale-[0.99]">
+                    <i data-lucide="search" class="w-4 h-4"></i>
+                    <span>TÜM COİNLERİ TARA VE LİSTELE (SCAN & SORT ALL COINS)</span>
+                </button>
+            </div>
+
+        </section>
+
+        <!-- İSTATİSTİK ŞERİDİ -->
+        <section id="statsSection" class="hidden grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div class="bg-gray-900/60 border border-gray-800 rounded-xl p-3 flex items-center space-x-3">
+                <div class="p-2.5 rounded-lg bg-indigo-500/10 text-indigo-400">
+                    <i data-lucide="radar" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-400">Taranan Coin (Scanned)</div>
+                    <div id="statScanned" class="text-base font-bold text-white">0</div>
+                </div>
+            </div>
+
+            <div class="bg-gray-900/60 border border-gray-800 rounded-xl p-3 flex items-center space-x-3">
+                <div class="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-400">
+                    <i data-lucide="trending-up" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-400">Long Setup</div>
+                    <div id="statLong" class="text-base font-bold text-emerald-400">0</div>
+                </div>
+            </div>
+
+            <div class="bg-gray-900/60 border border-gray-800 rounded-xl p-3 flex items-center space-x-3">
+                <div class="p-2.5 rounded-lg bg-rose-500/10 text-rose-400">
+                    <i data-lucide="trending-down" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-400">Short Setup</div>
+                    <div id="statShort" class="text-base font-bold text-rose-400">0</div>
+                </div>
+            </div>
+
+            <div class="bg-gray-900/60 border border-gray-800 rounded-xl p-3 flex items-center space-x-3">
+                <div class="p-2.5 rounded-lg bg-amber-500/10 text-amber-400">
+                    <i data-lucide="scale" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-400">Ortalama R:R (Avg R:R)</div>
+                    <div id="statAvgRR" class="text-base font-bold text-amber-400">1 : 0.0</div>
+                </div>
+            </div>
+
+            <div class="bg-gray-900/60 border border-gray-800 rounded-xl p-3 flex items-center space-x-3 col-span-2 sm:col-span-1">
+                <div class="p-2.5 rounded-lg bg-purple-500/10 text-purple-400">
+                    <i data-lucide="award" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-400">En Yüksek Skor (Top Score)</div>
+                    <div id="statTopScore" class="text-base font-bold text-purple-400">%0</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- YÜKLENİYOR ANİMASYONU -->
+        <div id="loadingState" class="hidden py-16 flex flex-col items-center justify-center space-y-4">
+            <div class="relative w-16 h-16">
+                <div class="w-16 h-16 rounded-full border-4 border-indigo-500/20 border-t-indigo-500 animate-spin"></div>
+                <div class="absolute inset-0 flex items-center justify-center">
+                    <i data-lucide="cpu" class="w-6 h-6 text-indigo-400 animate-pulse"></i>
+                </div>
+            </div>
+            <div class="text-center">
+                <p class="text-base font-semibold text-gray-200">Tüm Kripto Piyasası Taranıyor (Scanning All Crypto Pairs)...</p>
+                <p class="text-xs text-gray-400 mt-1">SMC, Kilit Formasyonlar ve 4 Zaman Dilimi (MTF) Hesaplanıyor</p>
+            </div>
+        </div>
+
+        <!-- BOŞ DURUM -->
+        <div id="emptyState" class="py-16 text-center border border-dashed border-gray-800 rounded-2xl bg-gray-900/30">
+            <div class="w-16 h-16 mx-auto rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4 shadow-lg shadow-indigo-500/10">
+                <i data-lucide="sparkles" class="w-8 h-8"></i>
+            </div>
+            <h3 class="text-lg font-bold text-gray-200">Tarama Yapılmayı Bekliyor (Awaiting Scan)</h3>
+            <p class="text-sm text-gray-400 max-w-md mx-auto mt-1 mb-6">
+                Filtrelerinizi (Strateji, Yön, Sıralama veya Arama) ayarlayın ve "Tüm Coinleri Tara ve Listele" butonuna tıklayın.
+            </p>
+            <button onclick="document.getElementById('scanBtn').click()" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm transition">
+                <i data-lucide="search" class="w-4 h-4"></i> Şimdi Tara (Scan Now)
+            </button>
+        </div>
+
+        <!-- SETUP KARTLARI IZGARASI -->
+        <section id="resultsGrid" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <!-- Kartlar JavaScript tarafından dinamik olarak buraya eklenecektir -->
+        </section>
+
+    </main>
+
+    <!-- 📊 İNTERAKTİF HAM VERİ KOPYALAMA POP-UP MODALI -->
+    <div id="rawDataModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 sm:p-5">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+            
+            <!-- Modal Üst Kontrol Başlığı -->
+            <div class="p-4 border-b border-gray-800 flex items-center justify-between bg-gray-900/95">
+                <div class="flex items-center space-x-3">
+                    <div class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
+                        <i data-lucide="file-spreadsheet" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold text-white flex items-center gap-2">
+                            Ham Piyasa Verisi Kopyalama (Raw Market Data)
+                            <span id="rawModalSymbol" class="text-xs px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-400 font-mono font-semibold border border-indigo-500/30">BTC/USDT</span>
+                        </h3>
+                        <p class="text-xs text-gray-400">Tarih, Saat, Zaman Dilimi ve Mum Sayısı Seçerek Veriyi Alın</p>
+                    </div>
+                </div>
+                <button id="closeRawModalBtn" class="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Modal Seçenekler Paneli -->
+            <div class="p-4 bg-gray-950/80 border-b border-gray-800/80 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                
+                <!-- 1. Zaman Dilimi Seçici -->
+                <div class="space-y-1">
+                    <label class="font-semibold text-gray-300 flex items-center gap-1.5">
+                        <i data-lucide="clock" class="w-3.5 h-3.5 text-indigo-400"></i> Zaman Dilimi Seçin:
+                    </label>
+                    <select id="rawModalTimeframe" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-xs text-white font-semibold focus:outline-none focus:border-indigo-500 transition">
+                        <option value="15m">15 Dakika (15m)</option>
+                        <option value="30m">30 Dakika (30m)</option>
+                        <option value="1h" selected>1 Saat (1h)</option>
+                        <option value="4h">4 Saat (4h)</option>
+                        <option value="1d">1 Gün (1d)</option>
+                    </select>
+                </div>
+
+                <!-- 2. Mum Sayısı / Zaman Aralığı Seçici -->
+                <div class="space-y-1">
+                    <label class="font-semibold text-gray-300 flex items-center gap-1.5">
+                        <i data-lucide="file-text" class="w-3.5 h-3.5 text-emerald-400"></i> Kapsanacak Mum Aralığı:
+                    </label>
+                    <select id="rawModalCandleLimit" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-xs text-emerald-300 font-bold focus:outline-none focus:border-emerald-500 transition">
+                        <option value="15">Son 15 Mum (~15 Bar)</option>
+                        <option value="30" selected>Son 30 Mum (~30 Bar - Önerilen)</option>
+                        <option value="50">Son 50 Mum (~50 Bar Detaylı)</option>
+                        <option value="100">Son 100 Mum (~100 Bar Geniş)</option>
+                        <option value="200">Son 200 Mum (~200 Bar Maksimum)</option>
+                    </select>
+                </div>
+
+            </div>
+
+            <!-- Canlı Önizleme Alanı -->
+            <div class="p-4 flex-1 overflow-y-auto space-y-2 bg-[#080c14]">
+                <div class="flex items-center justify-between text-xs text-gray-400">
+                    <span id="rawModalStatus" class="font-mono text-emerald-400 font-semibold">✓ Veriler Yerel Saatle Hazırlandı</span>
+                    <span class="text-[11px] text-gray-500">Aşağıdaki alan panoya kopyalanacak veridir</span>
+                </div>
+                <div class="relative">
+                    <pre id="rawModalPreview" class="w-full h-[260px] bg-gray-950 p-3.5 rounded-xl border border-gray-800 text-[11px] font-mono text-gray-300 overflow-x-auto overflow-y-auto whitespace-pre leading-relaxed select-all">Yükleniyor...</pre>
+                </div>
+            </div>
+
+            <!-- Modal Alt Eylemler -->
+            <div class="p-4 bg-gray-900 border-t border-gray-800 flex items-center justify-between gap-3">
+                <button id="cancelRawModalBtn" class="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold transition">
+                    Vazgeç
+                </button>
+
+                <button id="doCopyRawModalBtn" class="flex-1 max-w-xs py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs transition shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transform active:scale-95">
+                    <i data-lucide="copy" class="w-4 h-4"></i>
+                    <span>PANOYA KOPYALA (COPY TO CLIPBOARD)</span>
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 🧪 STRATEJİ TEST & BACKTEST OPTİMİZASYON LABORATUVARI MODALI -->
+    <div id="backtestModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-2 sm:p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-5xl overflow-hidden shadow-2xl flex flex-col max-h-[95vh]">
+            
+            <!-- Modal Üst Kontrol Başlığı -->
+            <div class="p-4 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3 bg-gray-900/95">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shadow-lg shadow-amber-500/10">
+                        <i data-lucide="flask-conical" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold text-white flex items-center gap-2">
+                            Strateji Test & Optimizasyon Laboratuvarı
+                            <span id="backtestModalSymbol" class="text-xs px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-400 font-mono font-semibold border border-indigo-500/30">BTC/USDT</span>
+                        </h3>
+                        <p class="text-xs text-gray-400">Tarihsel Verilerle Tüm 11 Stratejinin Başarı Oranı & En İyi Strateji Tespiti</p>
+                    </div>
+                </div>
+
+                <!-- Kontroller & Kapat Butonu -->
+                <div class="flex items-center space-x-2 text-xs">
+                    <div class="flex items-center bg-gray-800 rounded-xl p-1 border border-gray-700">
+                        <span class="text-gray-400 px-2 font-semibold">Zaman:</span>
+                        <select id="backtestTimeframeSelect" class="bg-gray-900 text-white font-semibold rounded-lg px-2 py-1 focus:outline-none border border-gray-700 text-xs">
+                            <option value="15m">15m</option>
+                            <option value="1h" selected>1h</option>
+                            <option value="4h">4h</option>
+                            <option value="1d">1d</option>
+                        </select>
+                    </div>
+
+                    <div class="flex items-center bg-gray-800 rounded-xl p-1 border border-gray-700">
+                        <span class="text-gray-400 px-2 font-semibold">Mum:</span>
+                        <select id="backtestLookbackSelect" class="bg-gray-900 text-amber-300 font-bold rounded-lg px-2 py-1 focus:outline-none border border-gray-700 text-xs">
+                            <option value="100">100 Mum</option>
+                            <option value="250">250 Mum</option>
+                            <option value="500" selected>500 Mum (~500 Bar)</option>
+                            <option value="1000">1000 Mum (Maks)</option>
+                        </select>
+                    </div>
+
+                    <button id="runBacktestBtn" onclick="runBacktestModal()" class="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold transition flex items-center gap-1 shadow-md shadow-amber-600/30">
+                        <i data-lucide="play" class="w-3.5 h-3.5"></i> <span>Yeniden Test Et</span>
+                    </button>
+
+                    <button id="closeBacktestModalBtn" class="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Modal İçerik Alanı -->
+            <div class="p-4 flex-1 overflow-y-auto space-y-4 bg-[#080c14]">
+                
+                <!-- Yükleniyor Göstergesi -->
+                <div id="backtestLoader" class="py-16 text-center space-y-3">
+                    <div class="w-10 h-10 mx-auto border-3 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+                    <p class="text-sm font-semibold text-gray-300">Tüm 11 Strateji Tarihsel Mumlar Üzerinde Test Ediliyor...</p>
+                </div>
+
+                <!-- Sonuç İçeriği -->
+                <div id="backtestContent" class="hidden space-y-4">
+                    
+                    <!-- 🏆 Şampiyon Strateji Afişi (Champion Banner) -->
+                    <div id="championBanner" class="p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-indigo-950/40 to-emerald-950/20 border border-amber-500/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
+                        <div class="flex items-center space-x-3.5">
+                            <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-300 text-gray-950 flex items-center justify-center flex-shrink-0 font-extrabold text-2xl shadow-lg shadow-amber-500/30">
+                                🏆
+                            </div>
+                            <div>
+                                <div class="text-[11px] font-extrabold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                                    <span>BU COİN İÇİN EN İYİ ÇALIŞAN 1 NUMARALI ŞAMPİYON STRATEJİ</span>
+                                </div>
+                                <h2 id="champName" class="text-lg font-black text-white mt-0.5">SMC Kurumsal Emir Bloğu</h2>
+                                <p id="champCategory" class="text-xs text-gray-300 mt-0.5">Smart Money Concepts</p>
+                            </div>
+                        </div>
+
+                        <!-- Şampiyon Metrik Rozetleri -->
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <div class="bg-gray-900/90 px-3 py-2 rounded-xl border border-gray-700 text-center">
+                                <div class="text-[10px] text-gray-400 font-semibold">WIN RATE</div>
+                                <div id="champWinRate" class="text-sm font-black text-emerald-400 font-mono">%0</div>
+                            </div>
+                            <div class="bg-gray-900/90 px-3 py-2 rounded-xl border border-gray-700 text-center">
+                                <div class="text-[10px] text-gray-400 font-semibold">NET KÂR</div>
+                                <div id="champNetProfit" class="text-sm font-black text-white font-mono">+%0</div>
+                            </div>
+                            <div class="bg-gray-900/90 px-3 py-2 rounded-xl border border-gray-700 text-center">
+                                <div class="text-[10px] text-gray-400 font-semibold">PROFIT FACTOR</div>
+                                <div id="champPF" class="text-sm font-black text-amber-400 font-mono">0.0</div>
+                            </div>
+                            <div class="bg-gray-900/90 px-3 py-2 rounded-xl border border-gray-700 text-center">
+                                <div class="text-[10px] text-gray-400 font-semibold">TOPLAM İŞLEM</div>
+                                <div id="champTrades" class="text-sm font-black text-indigo-400 font-mono">0 (0W/0L)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 📊 11 STRATEJİ LİDERLİK SIRALAMA TABLOSU -->
+                    <div class="bg-gray-900/80 rounded-2xl border border-gray-800 overflow-hidden shadow-lg">
+                        <div class="p-3.5 border-b border-gray-800 flex items-center justify-between">
+                            <h4 class="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-1.5">
+                                <i data-lucide="list-ordered" class="w-4 h-4 text-indigo-400"></i> Strateji Performans Sıralaması (Leaderboard)
+                            </h4>
+                            <span class="text-[11px] text-gray-400">1:2.0 Risk/Ödül Oranı ile Simüle Edilmiştir</span>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-gray-950/70 text-gray-400 font-semibold border-b border-gray-800">
+                                    <tr>
+                                        <th class="p-3"># Sıra & Strateji Adı</th>
+                                        <th class="p-3">Kategori</th>
+                                        <th class="p-3 text-center">Win Rate (% Başarı)</th>
+                                        <th class="p-3 text-center">İşlem (W / L)</th>
+                                        <th class="p-3 text-right">Net Getiri %</th>
+                                        <th class="p-3 text-right">Profit Factor</th>
+                                        <th class="p-3 text-right">Max Drawdown</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="backtestLeaderboardBody" class="divide-y divide-gray-800/60 font-mono">
+                                    <!-- JS ile dolacak -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 📜 SİMÜLE EDİLEN SON İŞLEMLER GEÇMİŞİ -->
+                    <div class="bg-gray-900/80 rounded-2xl border border-gray-800 p-3.5 shadow-lg">
+                        <div class="flex items-center justify-between mb-2.5">
+                            <h4 class="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-1.5">
+                                <i data-lucide="history" class="w-4 h-4 text-emerald-400"></i> Şampiyon Stratejinin Son Simüle Edilen İşlemleri
+                            </h4>
+                            <span class="text-[11px] text-gray-400">Giriş / Çıkış Seviyeleri</span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-[11px] font-mono">
+                                <thead class="text-gray-400 border-b border-gray-800">
+                                    <tr>
+                                        <th class="py-2">Giriş Zamanı</th>
+                                        <th class="py-2">Yön</th>
+                                        <th class="py-2">Giriş Fiyatı</th>
+                                        <th class="py-2">Stop Loss</th>
+                                        <th class="py-2">Hedef (TP)</th>
+                                        <th class="py-2">Çıkış Fiyatı</th>
+                                        <th class="py-2 text-right">Kâr / Zarar %</th>
+                                        <th class="py-2 text-center">Sonuç</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="backtestTradesBody" class="divide-y divide-gray-800/40">
+                                    <!-- JS ile dolacak -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- Modal Alt Kapat Butonu -->
+            <div class="p-3.5 bg-gray-900 border-t border-gray-800 flex justify-end">
+                <button onclick="document.getElementById('backtestModal').classList.add('hidden')" class="px-5 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-white text-xs font-semibold transition">
+                    Kapat
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 🤖 GOOGLE GEMINI AI AYARLARI MODALI -->
+    <div id="geminiSettingsModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl space-y-4">
+            
+            <div class="p-4 border-b border-gray-800 flex items-center justify-between bg-gray-900/90">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center shadow-lg shadow-indigo-500/10">
+                        <i data-lucide="sparkles" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold text-white">Google Gemini AI Ayarları</h3>
+                        <p class="text-xs text-gray-400">Otomatik Yapay Zeka Kripto Analizi</p>
+                    </div>
+                </div>
+                <button onclick="closeGeminiModal()" class="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="p-5 space-y-4 text-xs">
+                <div class="p-3 rounded-xl bg-indigo-950/40 border border-indigo-800/40 text-gray-300 space-y-2">
+                    <div class="font-bold text-indigo-300 flex items-center gap-1.5">
+                        <i data-lucide="info" class="w-4 h-4 text-indigo-400"></i> Ücretsiz Gemini API Key Nasıl Alınır?
+                    </div>
+                    <p class="text-[11px] text-gray-400 leading-relaxed">
+                        Google AI Studio tamamen ücretsiz API anahtarı sağlar. 
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-amber-400 hover:underline font-bold">Buraya tıklayarak</a> saniyeler içinde ücretsiz anahtarınızı alabilirsiniz.
+                    </p>
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="font-semibold text-gray-200 flex items-center gap-1">
+                        <i data-lucide="key" class="w-3.5 h-3.5 text-amber-400"></i> Gemini API Key:
+                    </label>
+                    <input type="text" style="-webkit-text-security: disc;" id="geminiApiKeyInput" name="gemini_api_key_custom_field" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" data-form-type="other" data-lpignore="true" data-1p-ignore="true" placeholder="AIzaSy..." class="w-full bg-gray-950 border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-gray-600 focus:outline-none focus:border-indigo-500 transition">
+                    <p class="text-[10px] text-gray-500">Anahtarınız yalnızca kendi tarayıcınızda güvenle saklanır.</p>
+                </div>
+
+                <div id="geminiKeyStatusMsg" class="hidden p-2.5 rounded-xl text-xs font-semibold"></div>
+            </div>
+
+            <div class="p-4 bg-gray-950 border-t border-gray-800 flex items-center justify-between">
+                <button onclick="clearGeminiKey()" class="px-3 py-2 rounded-xl text-rose-400 hover:bg-rose-500/10 text-xs font-semibold transition">
+                    Anahtarı Sil
+                </button>
+                <div class="flex items-center gap-2">
+                    <button onclick="closeGeminiModal()" class="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold transition">
+                        Kapat
+                    </button>
+                    <button onclick="saveGeminiKey()" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition shadow-lg shadow-indigo-600/30 flex items-center gap-1.5">
+                        <i data-lucide="check" class="w-4 h-4"></i>
+                        <span>Kaydet & Aktif Et</span>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 💬 SAĞDAN AÇILAN İNTERAKTİF AI CHAT & PROMPT DÜZENLEME PANELİ (SLIDE-OVER DRAWER) -->
+    <div id="aiChatDrawerBackdrop" onclick="closeAiChatDrawer()" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 hidden transition-opacity"></div>
+    
+    <div id="aiChatDrawer" class="fixed top-0 right-0 h-full w-full sm:w-[540px] md:w-[580px] z-50 bg-[#0b101b]/98 backdrop-blur-2xl border-l border-gray-800 shadow-2xl flex flex-col transition-transform duration-300 ease-in-out transform translate-x-full">
+        
+        <!-- Drawer Üst Başlık & Model Seçici -->
+        <div class="p-3.5 sm:p-4 border-b border-gray-800/90 flex items-center justify-between bg-gray-900/90 gap-2 flex-wrap">
+            <div class="flex items-center space-x-2.5">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-500 text-white flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                    <i data-lucide="bot" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-1.5">
+                        <h3 id="chatDrawerSymbol" class="text-sm font-black text-white font-mono">BTC/USDT</h3>
+                        <span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 font-bold border border-indigo-500/30 uppercase">AI TRADER</span>
+                    </div>
+                    <p class="text-[10px] text-gray-400">İnteraktif Prompt & Kurumsal Sohbet</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-2">
+                <!-- 🧠 Model Seçici Dropdown -->
+                <select id="chatModelSelect" class="bg-gray-950 border border-gray-700 hover:border-indigo-500 text-gray-200 text-xs font-semibold rounded-xl px-2.5 py-1.5 focus:outline-none transition cursor-pointer">
+                    <option value="gemini-2.0-flash" selected>⚡ Gemini 2.0 Flash</option>
+                    <option value="gemini-1.5-flash">🌟 Gemini 1.5 Flash</option>
+                    <option value="gemini-1.5-pro">🧠 Gemini 1.5 Pro</option>
+                </select>
+
+                <!-- Temizle & Kapat Butonları -->
+                <button onclick="clearChatHistory()" title="Sohbeti Temizle" class="p-2 rounded-xl text-gray-400 hover:text-rose-400 hover:bg-rose-500/10 transition">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+                <button onclick="closeAiChatDrawer()" title="Kapat (Esc)" class="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Hızlı Şablon Butonları -->
+        <div class="px-3.5 py-2 border-b border-gray-800/60 bg-gray-950/60 flex items-center gap-1.5 overflow-x-auto text-[11px] no-scrollbar">
+            <button onclick="appendQuickPrompt('🎯 Bu coin için en güvenli giriş, stop loss ve TP1/TP2 seviyelerini net olarak açıkla.')" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-indigo-300 border border-gray-700/80 whitespace-nowrap transition">
+                🎯 Giriş / SL Seviyeleri
+            </button>
+            <button onclick="appendQuickPrompt('⚠️ Son 15 mumu inceleyerek likidite avı veya boğa/ayı tuzağı riski var mı kontrol et.')" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-amber-300 border border-gray-700/80 whitespace-nowrap transition">
+                ⚠️ Tuzak Kontrolü
+            </button>
+            <button onclick="appendQuickPrompt('⚡ 15 dakikalık grafikte RSI ve EMA yapısına göre scalp işlem fırsatı var mı?')" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-emerald-300 border border-gray-700/80 whitespace-nowrap transition">
+                ⚡ Scalp Fırsatı
+            </button>
+            <button onclick="appendQuickPrompt('🔬 Saf OHLCV mum verileri ile algoritmanın iddia ettiği formasyon ve seviyeleri karşılaştır.')" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-cyan-300 border border-gray-700/80 whitespace-nowrap transition">
+                🔬 Saf Veri Denetimi
+            </button>
+        </div>
+
+        <!-- Sohbet Mesajları Alanı -->
+        <div id="chatMessagesContainer" class="flex-1 overflow-y-auto p-4 space-y-3.5 text-xs">
+            <!-- Karşılama Baloncuğu -->
+            <div class="flex items-start gap-2.5">
+                <div class="w-7 h-7 rounded-lg bg-indigo-600/30 border border-indigo-500/40 text-indigo-400 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <i data-lucide="bot" class="w-4 h-4"></i>
+                </div>
+                <div class="flex-1 p-3 rounded-2xl bg-gray-800/80 border border-gray-700 text-gray-200 leading-relaxed shadow-sm space-y-1.5">
+                    <div class="font-bold text-indigo-300 flex items-center gap-1.5">
+                        <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Kurumsal AI Asistanı Hazır
+                    </div>
+                    <p class="text-[11px] text-gray-300">
+                        Aşağıdaki metin kutusunda hazırlanan 2 aşamalı analiz istemini görebilir, dilediğiniz gibi düzenleyebilir veya kendi özel strateji sorularınızı ekleyip gönderebilirsiniz.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alt Prompt Düzenleme & Gönderim Alanı -->
+        <div class="p-3.5 sm:p-4 border-t border-gray-800 bg-gray-950/90 space-y-2">
+            <div class="relative">
+                <textarea id="chatPromptInput" rows="5" placeholder="AI isteminizi buraya yazın veya düzenleyin... (Enter = Gönder, Shift+Enter = Yeni Satır)" class="w-full bg-gray-900 border border-gray-700 rounded-xl p-3.5 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 font-mono transition min-h-[120px] max-h-[380px] overflow-y-auto leading-relaxed shadow-inner"></textarea>
+            </div>
+            
+            <div class="flex items-center justify-between gap-2">
+                <span class="text-[10px] text-gray-500">
+                    <kbd class="px-1 py-0.5 rounded bg-gray-800 text-gray-400 font-mono">Enter</kbd> = Gönder | 
+                    <kbd class="px-1 py-0.5 rounded bg-gray-800 text-gray-400 font-mono">Shift+Enter</kbd> = Yeni Satır
+                </span>
+                
+                <div class="flex items-center gap-2">
+                    <button onclick="resetToOriginalPrompt()" title="Orijinal İstem Şablonuna Sıfırla" class="px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold transition">
+                        Sıfırla
+                    </button>
+                    <button id="sendChatBtn" onclick="sendChatMessage()" class="px-4 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs transition shadow-md shadow-indigo-600/30 flex items-center gap-1.5 active:scale-95">
+                        <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                        <span>Gönder & Analiz Et</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- GELİŞMİŞ GRAFİK VE SETUP MODALI -->
+    <div id="chartModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-2 sm:p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-6xl overflow-hidden shadow-2xl flex flex-col max-h-[96vh]">
+            
+            <!-- Modal Üst Kontrol Başlığı -->
+            <div class="p-3.5 sm:p-4 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3 bg-gray-900/95">
+                <div class="flex items-center space-x-3">
+                    <h3 id="modalTitle" class="text-lg font-bold text-white flex items-center gap-2">
+                        BTC/USDT
+                    </h3>
+                    <span id="modalDirectionBadge" class="text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        🟢 LONG
+                    </span>
+                    <span id="modalScoreBadge" class="text-xs font-bold px-2.5 py-1 rounded-lg bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                        %92 Güven
+                    </span>
+                    <span id="modalRRBadge" class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                        1 : 2.5 R:R
+                    </span>
+                </div>
+                
+                <!-- Zaman Dilimi Butonları & Eylemler -->
+                <div class="flex items-center space-x-2">
+                    <div class="flex items-center bg-gray-800/90 rounded-lg p-0.5 border border-gray-700/80">
+                        <button onclick="changeModalTimeframe('15m')" id="tfBtn-15m" class="px-2 py-1 rounded-md text-[11px] font-semibold text-gray-400 hover:text-white transition">15m</button>
+                        <button onclick="changeModalTimeframe('1h')" id="tfBtn-1h" class="px-2 py-1 rounded-md text-[11px] font-semibold bg-indigo-600 text-white shadow">1h</button>
+                        <button onclick="changeModalTimeframe('4h')" id="tfBtn-4h" class="px-2 py-1 rounded-md text-[11px] font-semibold text-gray-400 hover:text-white transition">4h</button>
+                        <button onclick="changeModalTimeframe('1d')" id="tfBtn-1d" class="px-2 py-1 rounded-md text-[11px] font-semibold text-gray-400 hover:text-white transition">1d</button>
+                    </div>
+
+                    <button id="fitChartBtn" onclick="fitModalChart()" title="Grafiği Odakla" class="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-xs font-medium transition">
+                        <i data-lucide="maximize-2" class="w-4 h-4"></i>
+                    </button>
+                    
+                    <button id="modalCopyBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition shadow-md shadow-indigo-600/20">
+                        <i data-lucide="copy" class="w-3.5 h-3.5"></i> <span>AI Prompt Kopyala</span>
+                    </button>
+
+                    <button id="modalCopyRawBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition shadow-md shadow-emerald-600/20">
+                        <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5"></i> <span>Ham Veri Pop-up</span>
+                    </button>
+                    
+                    <button id="closeModalBtn" class="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Grafik Alanı & Floating HUD -->
+            <div class="relative w-full h-[450px] sm:h-[480px] bg-[#080c14]" id="chartContainerWrapper">
+                
+                <!-- Floating Info HUD -->
+                <div class="absolute top-3 left-3 z-20 pointer-events-none flex flex-col gap-1.5">
+                    <div class="bg-gray-950/85 backdrop-blur-md border border-gray-800/90 rounded-xl px-3 py-2 text-xs shadow-xl space-y-1">
+                        <div class="flex items-center gap-3">
+                            <span class="font-bold text-white text-sm" id="hudSymbol">BTC/USDT</span>
+                            <span class="text-xs font-mono font-bold" id="hudPrice">$0.00</span>
+                            <span class="text-[11px] font-mono" id="hudChange">0.0%</span>
+                        </div>
+                        <div class="flex items-center gap-3 text-[11px] text-gray-400">
+                            <span><strong class="text-amber-400">EMA 20:</strong> <span id="hudEma20" class="font-mono">$0</span></span>
+                            <span><strong class="text-cyan-400">EMA 50:</strong> <span id="hudEma50" class="font-mono">$0</span></span>
+                            <span><strong class="text-purple-400">EMA 200:</strong> <span id="hudEma200" class="font-mono">$0</span></span>
+                        </div>
+                    </div>
+
+                    <!-- Strateji & Formasyon Etiketi -->
+                    <div id="hudStrategy" class="bg-indigo-950/85 border border-indigo-800/60 text-indigo-300 px-2.5 py-1 rounded-lg text-[11px] font-semibold w-fit backdrop-blur-sm shadow-md">
+                        SMC & Trend Analizi
+                    </div>
+                </div>
+
+                <!-- Grafik Sağ Üst Seviye Lejantı -->
+                <div class="absolute top-3 right-3 z-20 pointer-events-none hidden sm:flex flex-col gap-1 bg-gray-950/85 backdrop-blur-md border border-gray-800/90 rounded-xl p-2.5 text-[11px] font-mono shadow-xl">
+                    <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-[#38bdf8]"></span> <span class="text-cyan-300 font-semibold">Giriş (Entry)</span></div>
+                    <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-[#f43f5e]"></span> <span class="text-rose-400 font-semibold">Stop Loss</span></div>
+                    <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-[#34d399]"></span> <span class="text-emerald-400 font-semibold">TP1 (1.5R)</span></div>
+                    <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-[#10b981]"></span> <span class="text-emerald-300 font-semibold">TP2 (2.5R - Ana)</span></div>
+                    <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-[#059669]"></span> <span class="text-emerald-500 font-semibold">TP3 (4.0R)</span></div>
+                </div>
+
+                <!-- Grafik Yükleniyor Overlay -->
+                <div id="chartLoader" class="absolute inset-0 flex items-center justify-center bg-gray-950/90 z-30 hidden">
+                    <div class="flex items-center space-x-3 text-indigo-400 text-sm font-semibold bg-gray-900 px-5 py-3 rounded-2xl border border-gray-800 shadow-2xl">
+                        <div class="w-5 h-5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+                        <span>Grafik, Pozisyon Kutuları ve Çizgiler Yükleniyor...</span>
+                    </div>
+                </div>
+
+                <!-- TradingView Canvas Konteyneri -->
+                <div id="tvChartArea" class="w-full h-full"></div>
+            </div>
+
+            <!-- Modal Alt Bilgi Çubuğu -->
+            <div class="p-4 bg-gray-950/95 border-t border-gray-800/90 flex flex-col gap-3">
+                
+                <!-- Seviyeler Matrisi -->
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs font-mono">
+                    <div class="bg-cyan-950/20 p-2 rounded-xl border border-cyan-800/40">
+                        <div class="text-cyan-400 text-[10px] font-bold">🎯 GİRİŞ (ENTRY)</div>
+                        <div id="modalEntry" class="font-bold text-white text-sm mt-0.5">$0.00</div>
+                    </div>
+                    <div class="bg-rose-950/30 p-2 rounded-xl border border-rose-900/50">
+                        <div class="text-rose-400 text-[10px] font-bold">🛑 ZARAR KES (STOP LOSS)</div>
+                        <div id="modalSL" class="font-bold text-rose-400 text-sm mt-0.5">$0.00</div>
+                    </div>
+                    <div class="bg-emerald-950/20 p-2 rounded-xl border border-emerald-900/40">
+                        <div class="text-emerald-400 text-[10px] font-bold">🏆 HEDEF 1 (TP1)</div>
+                        <div id="modalTP1" class="font-bold text-emerald-400 text-sm mt-0.5">$0.00</div>
+                    </div>
+                    <div class="bg-emerald-950/30 p-2 rounded-xl border border-emerald-800/50">
+                        <div class="text-emerald-300 text-[10px] font-bold">🚀 HEDEF 2 (TP2 - MAIN)</div>
+                        <div id="modalTP2" class="font-bold text-emerald-300 text-sm mt-0.5">$0.00</div>
+                    </div>
+                    <div class="bg-emerald-950/20 p-2 rounded-xl border border-emerald-900/40">
+                        <div class="text-emerald-500 text-[10px] font-bold">⭐ HEDEF 3 (TP3)</div>
+                        <div id="modalTP3" class="font-bold text-emerald-500 text-sm mt-0.5">$0.00</div>
+                    </div>
+                </div>
+
+                <!-- MTF Çoklu Zaman Dilimi Trend Matrisi -->
+                <div class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <div class="text-xs font-bold text-gray-300 flex items-center gap-1.5">
+                            <i data-lucide="compass" class="w-4 h-4 text-indigo-400"></i> Çoklu Zaman Dilimi (MTF Trend Alignment):
+                        </div>
+                        <span id="modalMtfStatus" class="text-xs font-bold text-indigo-400 font-mono">🟢 TAM BOĞA UYUMU</span>
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs" id="modalMtfGrid">
+                        <!-- JS ile dolacak -->
+                    </div>
+                </div>
+
+                <!-- Detaylı Strateji Gerekçeleri Listesi -->
+                <div class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800">
+                    <div class="text-xs font-bold text-gray-300 mb-1 flex items-center gap-1.5">
+                        <i data-lucide="check-check" class="w-4 h-4 text-emerald-400"></i> Neden Bu Setup? (Technical Strategy Reasons)
+                    </div>
+                    <ul id="modalReasonsList" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs text-gray-300">
+                        <!-- JS ile dolacak -->
+                    </ul>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 💬 SAĞ ALT YÜZEN AI CHAT AÇMA BUTONU (Her zaman tek tıkla açmak için) -->
+    <button id="floatingAiChatBtn" onclick="toggleOrOpenAiChatDrawer()" title="AI Trader Asistanı & Chat'i Aç" class="fixed bottom-6 right-6 z-40 px-4 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-500 hover:from-indigo-500 hover:to-purple-400 text-white font-bold text-xs shadow-2xl shadow-indigo-600/60 flex items-center gap-2 transition-all transform hover:scale-105 active:scale-95 border border-indigo-400/40 backdrop-blur-md">
+        <i data-lucide="bot" class="w-4 h-4 text-yellow-300"></i>
+        <span>💬 AI Sohbeti Aç</span>
+    </button>
+
+    <!-- TOAST BİLDİRİMİ -->
+    <div id="toastNotification" class="fixed bottom-6 left-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-gray-900 border border-indigo-500/40 shadow-2xl shadow-indigo-500/20 rounded-xl p-4 flex items-center space-x-3">
+        <div class="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+            <i data-lucide="check" class="w-5 h-5"></i>
+        </div>
+        <div>
+            <div class="text-sm font-bold text-white" id="toastTitle">Başarılı!</div>
+            <div class="text-xs text-gray-400" id="toastMsg">AI Analiz Promptu panoya kopyalandı.</div>
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <footer class="border-t border-gray-800/80 py-4 mt-8 bg-gray-950 text-center text-xs text-gray-500">
+        <p>CryptoSignalPro AI © 2026 • Tüm Hakları Saklıdır • Yalnızca Eğitim ve Teknik Analiz Destek Aracıdır.</p>
+    </footer>
+
+    <!-- SCRIPTS -->
+    <script src="/static/js/chart.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

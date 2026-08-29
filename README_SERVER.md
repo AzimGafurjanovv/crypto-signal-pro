@@ -9,7 +9,7 @@ Bu proje, bir Linux sunucuda (Hetzner, DigitalOcean, Contabo, AWS vb.) **7/24 ke
 Sunucunuza SSH ile bağlanın ve şu komutu yapıştırın:
 
 ```bash
-git clone https://github.com/KULLANICI_ADINIZ/crypto-signal-pro.git
+git clone https://github.com/AzimGafurjanovv/crypto-signal-pro.git
 cd crypto-signal-pro
 ```
 

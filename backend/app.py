@@ -136,8 +136,29 @@ class ServerBackgroundScanner:
 
 bg_scanner = ServerBackgroundScanner()
 
+async def central_data_updater_loop():
+    """
+    ✅ MERKEZİ VERİ GÜNCELLEME DÖNGÜSÜ
+    Her 60 saniyede bir Binance'ten TÜM coinlerin anlık fiyatını
+    tek bir toplu API çağrısıyla çeker ve market_manager._price_cache'e yazar.
+    Trade note alarmları, radar servisi ve tüm diğer arka plan görevleri
+    bu önbellekten okur — kendi bağımsız API çağrısı yapmazlar.
+    """
+    print("[CentralUpdater] ✅ Merkezi 60s Fiyat Güncelleme Servisi başlatıldı.")
+    # İlk çalışmada hemen fiyat çek
+    await asyncio.to_thread(market_manager.refresh_price_cache)
+    while True:
+        try:
+            await asyncio.sleep(60)
+            await asyncio.to_thread(market_manager.refresh_price_cache)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"[CentralUpdater] Hata: {e}")
+            await asyncio.sleep(10)
+
 async def trade_notes_monitoring_loop():
-    """Arka planda her 30 saniyede bir kullanıcının özel trade notları ve fiyat alarmlarını kontrol eder."""
+    """Arka planda her 60 saniyede bir kullanıcının özel trade notları ve fiyat alarmlarını kontrol eder."""
     while True:
         try:
             triggered = await asyncio.to_thread(trade_notes_manager.check_and_trigger_alerts)
@@ -154,31 +175,27 @@ async def trade_notes_monitoring_loop():
             break
         except Exception as e:
             print(f"⚠️ Trade note monitor loop error: {e}")
-        await asyncio.sleep(30)
+        await asyncio.sleep(60)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Sunucu başlatıldığında arka plan işçilerini başlat
+    # ✅ Merkezi fiyat önbelleği en önce başlar; diğerleri ondan beslenir
+    price_updater_task = asyncio.create_task(central_data_updater_loop())
     scan_task = asyncio.create_task(bg_scanner.background_loop())
     telegram_task = asyncio.create_task(telegram_alert_service.start_loop())
     notes_task = asyncio.create_task(trade_notes_monitoring_loop())
     yield
     # Sunucu kapatılırken iptal et
+    price_updater_task.cancel()
     scan_task.cancel()
     telegram_task.cancel()
     notes_task.cancel()
-    try:
-        await scan_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await telegram_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await notes_task
-    except asyncio.CancelledError:
-        pass
+    for task in [price_updater_task, scan_task, telegram_task, notes_task]:
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 app = FastAPI(title="CryptoSignalPro AI API", version="5.0.0", lifespan=lifespan)
 
@@ -250,6 +267,24 @@ async def get_pattern_radar(timeframe: str = Query("1h"), limit_coins: int = Que
 async def get_pairs():
     pairs = market_manager.get_top_pairs(limit=50)
     return {"status": "success", "count": len(pairs), "pairs": pairs}
+
+@app.get("/api/prices")
+async def get_prices(symbols: Optional[str] = Query(None)):
+    """
+    ✅ Merkezi önbellekten anlık fiyatları döndürür.
+    symbols: Virgülle ayrılmış coin listesi (ör: BTC/USDT,ETH/USDT).
+    Boş bırakılırsa tüm önbelleği döndürür.
+    Sıfır API çağrısı — tüm fiyatlar central_data_updater_loop tarafından
+    her 60 saniyede bir güncellenmektedir.
+    """
+    all_prices = market_manager.get_all_cached_prices()
+    if symbols:
+        sym_list = [s.strip().upper() for s in symbols.split(",")]
+        filtered = {s: all_prices[s] for s in sym_list if s in all_prices}
+        return {"status": "success", "count": len(filtered), "prices": filtered,
+                "cache_age_seconds": round(time.time() - market_manager._price_cache_time, 1)}
+    return {"status": "success", "count": len(all_prices), "prices": all_prices,
+            "cache_age_seconds": round(time.time() - market_manager._price_cache_time, 1)}
 
 def scan_single_pair(symbol: str, timeframe: str, direction: str, strategy: str, enable_min_conf: bool, min_confidence: int, min_rr: float, raw_candle_limit: int = 30) -> Optional[Dict[str, Any]]:
     try:

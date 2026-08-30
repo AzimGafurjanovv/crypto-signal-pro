@@ -662,14 +662,12 @@ class TradeNotesAlertManager:
         triggered_list = []
         symbols = list(set(n["symbol"] for n in active_notes))
 
+        # ✅ Merkezi önbellekten fiyat oku — sıfır API çağrısı
         price_map = {}
         for sym in symbols:
-            try:
-                df = market_manager.get_market_data(sym, timeframe="15m", limit=5)
-                if df is not None and len(df) > 0:
-                    price_map[sym] = float(df['close'].iloc[-1])
-            except Exception:
-                pass
+            price = market_manager.get_cached_price(sym)
+            if price:
+                price_map[sym] = price
 
         for note in active_notes:
             sym = note["symbol"]

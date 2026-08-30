@@ -130,12 +130,12 @@ async function initJournalPage() {
     await fetchJournalTrades();
     await fetchTradeNotes();
 
-    // 30 saniyede bir canlı fiyatları ve notları güncelle
+    // 60 saniyede bir canlı fiyatları ve notları güncelle (sunucu önbelleğiyle senkron)
     setInterval(() => {
         if (activeMainTab === 'notes') {
             updateLivePricesForNotes();
         }
-    }, 30000);
+    }, 60000);
 }
 
 // =========================================================================
@@ -244,13 +244,29 @@ async function fetchAndAutofillPrice(symbol, modalType) {
     if (textEl) textEl.textContent = '⏳ Fiyat alınıyor...';
 
     try {
-        const res = await fetch(`/api/chart-data?symbol=${encodeURIComponent(symbol)}&timeframe=15m&limit=2`);
+        // ✅ Önce sunucu taraflı 60s önbellekten hızlı fiyat dene
+        const res = await fetch(`/api/prices?symbols=${encodeURIComponent(symbol)}`);
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
-        
-        if (data.candles && data.candles.length > 0) {
-            const lastCandle = data.candles[data.candles.length - 1];
-            const price = parseFloat(lastCandle.close);
+
+        let price = null;
+        if (data.prices && data.prices[symbol]) {
+            price = parseFloat(data.prices[symbol]);
+        }
+
+        // Önbellekte yoksa chart-data ile yedek al
+        if (!price || isNaN(price)) {
+            const res2 = await fetch(`/api/chart-data?symbol=${encodeURIComponent(symbol)}&timeframe=15m&limit=2`);
+            if (res2.ok) {
+                const data2 = await res2.json();
+                if (data2.candles && data2.candles.length > 0) {
+                    const lastCandle = data2.candles[data2.candles.length - 1];
+                    price = parseFloat(lastCandle.close);
+                }
+            }
+        }
+
+        if (price && !isNaN(price)) {
             livePriceCache[symbol] = price;
 
             if (textEl) {
@@ -1071,19 +1087,21 @@ function filterNotesByStatus(status) {
 
 async function updateLivePricesForNotes() {
     const activeSymbols = [...new Set(currentTradeNotes.map(n => n.symbol))];
-    for (const sym of activeSymbols) {
-        try {
-            const res = await fetch(`/api/chart-data?symbol=${encodeURIComponent(sym)}&timeframe=15m&limit=2`);
-            if (res.ok) {
-                const d = await res.json();
-                if (d.candles && d.candles.length > 0) {
-                    livePriceCache[sym] = d.candles[d.candles.length - 1].close;
-                }
+    if (activeSymbols.length === 0) { renderTradeNotes(); return; }
+
+    try {
+        // ✅ Tek toplu istek — sunucudaki 60s önbellekten tüm fiyatları çek
+        const res = await fetch(`/api/prices?symbols=${encodeURIComponent(activeSymbols.join(','))}`);
+        if (res.ok) {
+            const d = await res.json();
+            if (d.prices) {
+                Object.assign(livePriceCache, d.prices);
             }
-        } catch (e) {}
-    }
+        }
+    } catch (e) {}
     renderTradeNotes();
 }
+
 
 function renderTradeNotes() {
     let list = currentTradeNotes;

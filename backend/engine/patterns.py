@@ -306,29 +306,31 @@ def detect_chart_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 if slope_up < -1e-5 and slope_down > 1e-5:
                     if upper_now > lower_now:
                         height = abs(p1['price'] - v1['price'])
-                        is_bull = current_price >= upper_now * 0.997
-                        is_bear = current_price <= lower_now * 1.003
+                        is_bull = current_price >= upper_now * 0.998
+                        is_bear = current_price <= lower_now * 1.002
                         
-                        pat_type = 'BULLISH' if is_bull else ('BEARISH' if is_bear else 'NEUTRAL')
-                        bo_lvl = upper_now if is_bull else lower_now
-                        target = current_price + height if is_bull else current_price - height
-                        
-                        line_upper = _two_point_line(df, p1['index'], n - 1, upper_start, upper_now)
-                        line_lower = _two_point_line(df, v1['index'], n - 1, lower_start, lower_now)
-                        
-                        patterns.append({
-                            'name': 'Simetrik Üçgen / Flama Kırılımı',
-                            'type': pat_type if pat_type != 'NEUTRAL' else 'BULLISH',
-                            'category': '2. Simetrik Üçgen / Pennant',
-                            'quality_score': 88,
-                            'breakout_level': round(bo_lvl, 4),
-                            'target': round(target, 4),
-                            'description': f'Geometrik simetrik üçgen (${lower_now:,.4f} - ${upper_now:,.4f}) bandından çıkış gerçekleşti. Hedef: ${target:,.4f}',
-                            'lines': [
-                                {'name': 'Alçalan Direnç Trendi', 'points': line_upper, 'color': '#fbbf24', 'lineWidth': 2, 'lineStyle': 0},
-                                {'name': 'Yükselen Destek Trendi', 'points': line_lower, 'color': '#38bdf8', 'lineWidth': 2, 'lineStyle': 0}
-                            ]
-                        })
+                        # Sadece gerçek kırılım varsa ekle (asla zorla BULLISH yapma)
+                        if is_bull or is_bear:
+                            pat_type = 'BULLISH' if is_bull else 'BEARISH'
+                            bo_lvl = upper_now if is_bull else lower_now
+                            target = current_price + height if is_bull else current_price - height
+                            
+                            line_upper = _two_point_line(df, p1['index'], n - 1, upper_start, upper_now)
+                            line_lower = _two_point_line(df, v1['index'], n - 1, lower_start, lower_now)
+                            
+                            patterns.append({
+                                'name': f'Simetrik Üçgen / Flama ({pat_type})',
+                                'type': pat_type,
+                                'category': '2. Simetrik Üçgen / Pennant',
+                                'quality_score': 88,
+                                'breakout_level': round(bo_lvl, 4),
+                                'target': round(target, 4),
+                                'description': f'Geometrik simetrik üçgen (${lower_now:,.4f} - ${upper_now:,.4f}) bandından {pat_type} çıkış gerçekleşti. Hedef: ${target:,.4f}',
+                                'lines': [
+                                    {'name': 'Alçalan Direnç Trendi', 'points': line_upper, 'color': '#fbbf24', 'lineWidth': 2, 'lineStyle': 0},
+                                    {'name': 'Yükselen Destek Trendi', 'points': line_lower, 'color': '#38bdf8', 'lineWidth': 2, 'lineStyle': 0}
+                                ]
+                            })
 
                 # B. YUKSELEN UCGEN (Direnc yatay, Destek yukari egimli)
                 elif abs(p2['price'] - p1['price']) / p1['price'] <= 0.015 and slope_down > 1e-5:
@@ -382,12 +384,12 @@ def detect_chart_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
     if len(peaks) >= 2:
         for p in peaks[-4:-1]:
             res = p['price']
-            breaks = [i for i in range(p['index'] + 2, n) if df['close'].iloc[i] > res * 1.005]
+            breaks = [i for i in range(p['index'] + 2, n) if df['close'].iloc[i] > res * 1.004]
             if breaks:
                 first_brk = breaks[0]
                 post_lows = df['low'].iloc[first_brk:]
-                if len(post_lows) > 0 and post_lows.min() <= res + 0.35 * current_atr and current_price >= res * 0.995:
-                    target = current_price + (current_atr * 2.8)
+                if len(post_lows) > 0 and post_lows.min() <= res + 0.20 * current_atr and current_price >= res * 0.996:
+                    target = current_price + (current_atr * 2.5)
                     line_pts = _horizontal_line(df, p['index'], n - 1, res)
                     patterns.append({
                         'name': 'Direnç/Destek Dönüşümü (S/R Flip Retest)',
@@ -407,12 +409,12 @@ def detect_chart_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
     if len(valleys) >= 2:
         for v in valleys[-4:-1]:
             sup = v['price']
-            breaks = [i for i in range(v['index'] + 2, n) if df['close'].iloc[i] < sup * 0.995]
+            breaks = [i for i in range(v['index'] + 2, n) if df['close'].iloc[i] < sup * 0.996]
             if breaks:
                 first_brk = breaks[0]
                 post_highs = df['high'].iloc[first_brk:]
-                if len(post_highs) > 0 and post_highs.max() >= sup - 0.35 * current_atr and current_price <= sup * 1.005:
-                    target = current_price - (current_atr * 2.8)
+                if len(post_highs) > 0 and post_highs.max() >= sup - 0.20 * current_atr and current_price <= sup * 1.004:
+                    target = current_price - (current_atr * 2.5)
                     line_pts = _horizontal_line(df, v['index'], n - 1, sup)
                     patterns.append({
                         'name': 'Destek/Direnç Dönüşümü (S/R Flip Retest)',
@@ -430,7 +432,7 @@ def detect_chart_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
                     break
 
     # ─────────────────────────────────────────────────────────────────────────
-    # 5. 🇼 DOUBLE BOTTOM (W) & 🇲 DOUBLE TOP (M)
+    # 5. 🇼 DOUBLE BOTTOM (W) & 🇲 DOUBLE TOP (M) - Neckline Teyidi Şartı!
     # ─────────────────────────────────────────────────────────────────────────
     if len(valleys) >= 2:
         v1, v2 = valleys[-2], valleys[-1]
@@ -439,25 +441,28 @@ def detect_chart_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
             price_diff_pct = abs(v1['price'] - v2['price']) / v1['price'] * 100.0
             if price_diff_pct <= 1.8:
                 neckline = float(df['high'].iloc[v1['index']:v2['index'] + 1].max())
-                target = neckline + (neckline - min(v1['price'], v2['price']))
                 
-                line_neck = _horizontal_line(df, v1['index'], n - 1, neckline)
-                line_bottom = _horizontal_line(df, v1['index'], v2['index'], min(v1['price'], v2['price']))
-                
-                patterns.append({
-                    'name': 'Double Bottom (İkili Dip W Formasyonu)',
-                    'type': 'BULLISH',
-                    'category': '5. Double Bottom / Top',
-                    'quality_score': 94,
-                    'neckline': round(neckline, 4),
-                    'breakout_level': round(neckline, 4),
-                    'target': round(target, 4),
-                    'description': f'${v1["price"]:,.4f} ve ${v2["price"]:,.4f} seviyelerinde simetrik ikili dip (W). Boyun: ${neckline:,.4f}. Hedef: ${target:,.4f}',
-                    'lines': [
-                        {'name': 'W Boyun Çizgisi (Neckline)', 'points': line_neck, 'color': '#fbbf24', 'lineWidth': 2, 'lineStyle': 0},
-                        {'name': 'W Taban Destek Seviyesi', 'points': line_bottom, 'color': '#10b981', 'lineWidth': 1, 'lineStyle': 2}
-                    ]
-                })
+                # ✅ Thomas Bulkowski Standardı: Neckline kırılımı veya retest kontrolü!
+                # Fiyat neckline seviyesini test etmiş veya kırmış olmalı (en az neckline * 0.995)
+                if current_price >= neckline * 0.995:
+                    target = neckline + (neckline - min(v1['price'], v2['price']))
+                    line_neck = _horizontal_line(df, v1['index'], n - 1, neckline)
+                    line_bottom = _horizontal_line(df, v1['index'], v2['index'], min(v1['price'], v2['price']))
+                    
+                    patterns.append({
+                        'name': 'Double Bottom (İkili Dip W Formasyonu)',
+                        'type': 'BULLISH',
+                        'category': '5. Double Bottom / Top',
+                        'quality_score': 94,
+                        'neckline': round(neckline, 4),
+                        'breakout_level': round(neckline, 4),
+                        'target': round(target, 4),
+                        'description': f'${v1["price"]:,.4f} ve ${v2["price"]:,.4f} seviyelerinde simetrik ikili dip (W). Boyun çizgisi (${neckline:,.4f}) kırılarak onaylandı. Hedef: ${target:,.4f}',
+                        'lines': [
+                            {'name': 'W Boyun Çizgisi (Neckline)', 'points': line_neck, 'color': '#fbbf24', 'lineWidth': 2, 'lineStyle': 0},
+                            {'name': 'W Taban Destek Seviyesi', 'points': line_bottom, 'color': '#10b981', 'lineWidth': 1, 'lineStyle': 2}
+                        ]
+                    })
 
     if len(peaks) >= 2:
         p1, p2 = peaks[-2], peaks[-1]
@@ -466,25 +471,27 @@ def detect_chart_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
             price_diff_pct = abs(p1['price'] - p2['price']) / p1['price'] * 100.0
             if price_diff_pct <= 1.8:
                 neckline = float(df['low'].iloc[p1['index']:p2['index'] + 1].min())
-                target = neckline - (max(p1['price'], p2['price']) - neckline)
                 
-                line_neck = _horizontal_line(df, p1['index'], n - 1, neckline)
-                line_top = _horizontal_line(df, p1['index'], p2['index'], max(p1['price'], p2['price']))
-                
-                patterns.append({
-                    'name': 'Double Top (İkili Tepe M Formasyonu)',
-                    'type': 'BEARISH',
-                    'category': '5. Double Bottom / Top',
-                    'quality_score': 94,
-                    'neckline': round(neckline, 4),
-                    'breakout_level': round(neckline, 4),
-                    'target': round(target, 4),
-                    'description': f'${p1["price"]:,.4f} ve ${p2["price"]:,.4f} seviyelerinde çift tepe (M). Boyun: ${neckline:,.4f}. Hedef: ${target:,.4f}',
-                    'lines': [
-                        {'name': 'M Boyun Çizgisi (Neckline)', 'points': line_neck, 'color': '#fbbf24', 'lineWidth': 2, 'lineStyle': 0},
-                        {'name': 'M Tavan Direnç Seviyesi', 'points': line_top, 'color': '#f43f5e', 'lineWidth': 1, 'lineStyle': 2}
-                    ]
-                })
+                # ✅ Neckline kırılımı veya retest kontrolü!
+                if current_price <= neckline * 1.005:
+                    target = neckline - (max(p1['price'], p2['price']) - neckline)
+                    line_neck = _horizontal_line(df, p1['index'], n - 1, neckline)
+                    line_top = _horizontal_line(df, p1['index'], p2['index'], max(p1['price'], p2['price']))
+                    
+                    patterns.append({
+                        'name': 'Double Top (İkili Tepe M Formasyonu)',
+                        'type': 'BEARISH',
+                        'category': '5. Double Bottom / Top',
+                        'quality_score': 94,
+                        'neckline': round(neckline, 4),
+                        'breakout_level': round(neckline, 4),
+                        'target': round(target, 4),
+                        'description': f'${p1["price"]:,.4f} ve ${p2["price"]:,.4f} seviyelerinde çift tepe (M). Boyun çizgisi (${neckline:,.4f}) kırılarak onaylandı. Hedef: ${target:,.4f}',
+                        'lines': [
+                            {'name': 'M Boyun Çizgisi (Neckline)', 'points': line_neck, 'color': '#fbbf24', 'lineWidth': 2, 'lineStyle': 0},
+                            {'name': 'M Tavan Direnç Seviyesi', 'points': line_top, 'color': '#f43f5e', 'lineWidth': 1, 'lineStyle': 2}
+                        ]
+                    })
 
     # ─────────────────────────────────────────────────────────────────────────
     # 6. 📊 RANGE KIRILIMI & LİKİDİTE SAPMASI (Deviation Reclaim)
@@ -496,8 +503,8 @@ def detect_chart_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
         range_height = range_high - range_low
         start_idx = max(0, n - look)
 
-        # A. Range Ust Kirilimi
-        if current_price >= range_high * 0.997 and df['low'].iloc[-4:].min() <= range_high + 0.3 * current_atr:
+        # A. Range Ust Kirilimi (Hacim veya retest teyidi ile)
+        if current_price >= range_high * 0.998 and df['low'].iloc[-4:].min() <= range_high + 0.25 * current_atr:
             target = range_high + range_height
             line_top = _horizontal_line(df, start_idx, n - 1, range_high)
             line_bot = _horizontal_line(df, start_idx, n - 1, range_low)

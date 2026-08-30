@@ -74,53 +74,68 @@ def analyze_single_timeframe(df: pd.DataFrame) -> Dict[str, Any]:
 def analyze_all_timeframes(symbol: str) -> Dict[str, Any]:
     """
     15m (Kısa Vade / Scalp), 1h (Orta Vade / Gün İçi), 4h (Uzun Vade / Swing) ve 1d (Makro Trend)
-    zaman dilimlerini analiz ederek çoklu zaman dilimi uyumunu hesaplar.
+    zaman dilimlerini analiz ederek ağırlıklı çoklu zaman dilimi uyumunu hesaplar.
+    Makro (1d, 4h) zaman dilimleri mikro (15m) dilimlere göre daha yüksek ağırlığa sahiptir.
     """
     timeframes = ['15m', '1h', '4h', '1d']
+    tf_weights = {'15m': 1, '1h': 2, '4h': 3, '1d': 4}  # Toplam 10 ağırlık
     tf_results = {}
+    
+    total_long_weight = 0
+    total_short_weight = 0
     
     for tf in timeframes:
         try:
             df = market_manager.get_market_data(symbol, timeframe=tf, limit=120)
-            tf_results[tf] = analyze_single_timeframe(df)
+            res = analyze_single_timeframe(df)
+            tf_results[tf] = res
+            
+            w = tf_weights[tf]
+            if res['signal'] == 'LONG':
+                total_long_weight += w
+            elif res['signal'] == 'SHORT':
+                total_short_weight += w
         except Exception:
             tf_results[tf] = analyze_single_timeframe(None)
         
-    # Zaman Dilimi Uyumunu Hesapla
+    # Zaman Dilimi Uyumunu Ağırlıklı Hesapla (Max 10)
     signals = [tf_results[tf]['signal'] for tf in timeframes]
     long_count = signals.count('LONG')
     short_count = signals.count('SHORT')
     
-    if long_count == 4:
+    is_1d_short = tf_results['1d']['signal'] == 'SHORT'
+    is_1d_long = tf_results['1d']['signal'] == 'LONG'
+    
+    if total_long_weight >= 9:
         alignment_status = "🟢 TAM BOĞA UYUMU (4/4 TF LONG)"
         bias = "LONG"
         bias_strength = "ÇOK GÜÇLÜ"
         summary_tr = "Kısa, orta, uzun ve günlük makro vadelerin tümü alıcı kontrolünde; en yüksek başarı oranlı trend yönü."
-    elif long_count >= 3:
-        alignment_status = "🟢 GÜÇLÜ BOĞA UYUMU (3/4 TF LONG)"
+    elif total_long_weight >= 6 and not is_1d_short:
+        alignment_status = "🟢 GÜÇLÜ BOĞA UYUMU (Makro & Orta Vade Boğa)"
         bias = "LONG"
         bias_strength = "GÜÇLÜ"
-        summary_tr = "Zaman dilimlerinin çoğunluğu yükseliş trendinde ilerliyor."
-    elif short_count == 4:
+        summary_tr = "Makro (1d/4h) ve orta vade alıcı kontrolünde yükseliş trendinde ilerliyor."
+    elif total_short_weight >= 9:
         alignment_status = "🔴 TAM AYI UYUMU (4/4 TF SHORT)"
         bias = "SHORT"
         bias_strength = "ÇOK GÜÇLÜ"
         summary_tr = "Kısa, orta, uzun ve günlük makro vadelerin tümü satıcı kontrolünde; en yüksek başarı oranlı düşüş trendi."
-    elif short_count >= 3:
-        alignment_status = "🔴 GÜÇLÜ AYI UYUMU (3/4 TF SHORT)"
+    elif total_short_weight >= 6 and not is_1d_long:
+        alignment_status = "🔴 GÜÇLÜ AYI UYUMU (Makro & Orta Vade Ayı)"
         bias = "SHORT"
         bias_strength = "GÜÇLÜ"
-        summary_tr = "Zaman dilimlerinin çoğunluğu düşüş trendinde ilerliyor."
-    elif tf_results['1d']['signal'] == 'SHORT' and tf_results['15m']['signal'] == 'LONG':
-        alignment_status = "⚠️ TEPKİ YÜKSELİŞİ (Makro Ayı / Kısa Vade Long)"
+        summary_tr = "Makro (1d/4h) ve orta vade satıcı kontrolünde düşüş trendinde ilerliyor."
+    elif is_1d_short and tf_results['15m']['signal'] == 'LONG':
+        alignment_status = "⚠️ TEPKİ YÜKSELİŞİ (Makro Ayı / Kısa Vade Long Tepkisi)"
         bias = "LONG_PULLBACK"
-        bias_strength = "ORTA / DÜZELTME"
-        summary_tr = "Ana trend düşüş yönlü ancak kısa vadede aşırı satım tepkisi ve geri çekilme yükselişi yaşanıyor."
-    elif tf_results['1d']['signal'] == 'LONG' and tf_results['15m']['signal'] == 'SHORT':
-        alignment_status = "⚠️ BOĞA DÜZELTMESİ (Makro Boğa / Kısa Vade Short)"
+        bias_strength = "ORTA / DÜZELTME (Yüksek Risk)"
+        summary_tr = "1D Ana trend düşüş yönlü; 15m yükselişi sadece bir düzeltme/tepki hareketidir. Sıkı stoplu scalp gerekir."
+    elif is_1d_long and tf_results['15m']['signal'] == 'SHORT':
+        alignment_status = "⚠️ BOĞA DÜZELTMESİ (Makro Boğa / Kısa Vade Kâr Satışı)"
         bias = "SHORT_PULLBACK"
-        bias_strength = "ORTA / DÜZELTME"
-        summary_tr = "Ana trend yükseliş yönlü ancak kısa vadede kâr satışı ve düzeltme geri çekilmesi yaşanıyor."
+        bias_strength = "ORTA / DÜZELTME (Yüksek Risk)"
+        summary_tr = "1D Ana trend yükseliş yönlü; 15m düşüşü kâr satışı geri çekilmesidir."
     else:
         alignment_status = "⚪ KARIŞIK / NÖTR PİYASA YAPISI"
         bias = "NEUTRAL"
@@ -133,6 +148,9 @@ def analyze_all_timeframes(symbol: str) -> Dict[str, Any]:
         'bias': bias,
         'bias_strength': bias_strength,
         'summary_tr': summary_tr,
+        'total_long_weight': total_long_weight,
+        'total_short_weight': total_short_weight,
+
         'timeframes': {
             '15m': {
                 'name': 'Kısa Vade (15m - Scalp)',

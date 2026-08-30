@@ -351,6 +351,14 @@ def calculate_crypto_setup(
     l_score, l_reasons, l_strats, l_vetos, l_sr = _evaluate_super_trader_long(df, smc_data, div_data, patterns, indicators, mtf_data)
     s_score, s_reasons, s_strats, s_vetos, s_sr = _evaluate_super_trader_short(df, smc_data, div_data, patterns, indicators, mtf_data)
 
+    # Net yön tespiti ve yatay piyasa (choppy) filtresi
+    score_diff = abs(l_score - s_score)
+    max_raw_score = max(l_score, s_score)
+    
+    # İki taraf da birbirine çok yakınsa ve skor düşükse piyasa kararsızdır
+    if max_raw_score < 32 or (score_diff < 4 and max_raw_score < 45):
+        return None
+
     is_long = l_score >= s_score
     raw_score = l_score if is_long else s_score
     reasons = l_reasons if is_long else s_reasons
@@ -359,9 +367,14 @@ def calculate_crypto_setup(
     sr_levels = l_sr if is_long else s_sr
 
     confidence_score = max(1, min(99, raw_score))
+    
+    # Ağır veto durumu: Çoklu diskalifiye varsa skoru ciddi düşür
+    if len(vetos) >= 2:
+        confidence_score = max(1, confidence_score - 15)
+
     score_grade, score_desc = _get_super_trader_grade(confidence_score)
 
-    if confidence_score < min_confidence:
+    if confidence_score < min_confidence or confidence_score < 30:
         return None
 
     if not strategies:
@@ -370,7 +383,7 @@ def calculate_crypto_setup(
     direction_str = "LONG" if is_long else "SHORT"
     direction_label = f"{'🟢' if is_long else '🔴'} {score_grade} ({direction_str})"
 
-    # 🎯 EN UYGUN / BASKIN STRATEJİ BELİRLEME (Yalnızca bu yönle uyumlu formasyonlar)
+    # 🎯 EN UYGUN / BASKIN STRATEJİ BELİRLEME
     matching_patterns = [p for p in patterns if (p['type'] == 'BULLISH' if is_long else p['type'] == 'BEARISH')]
     pattern_names = [p['name'] for p in matching_patterns]
 
@@ -386,36 +399,61 @@ def calculate_crypto_setup(
     else:
         primary_strategy = strategies[0]
 
-    # Seviye ve Hedef Hesaplama
+    # ─────────────────────────────────────────────────────────────────────────
+    # 🛑 PROFESYONEL STOP LOSS VE TAKE PROFIT HESAPLAMASI (ATR + Swing Destek/Direnç)
+    # Kriptoda %0.8 gibi dar SL'ler piyasa gürültüsünde (noise) kolayca patlar.
+    # Doğru yaklaşım: En az 1.5-2.0 x ATR veya yapısal swing dip/tepe arkasına SL koymak.
+    # ─────────────────────────────────────────────────────────────────────────
     swing_highs = smc_data['structure']['swing_highs']
     swing_lows  = smc_data['structure']['swing_lows']
     entry_price = current_price
+    min_atr_buffer = max(current_atr * 1.6, entry_price * 0.012)  # En az %1.2 veya 1.6x ATR
 
     if is_long:
-        recent_low = swing_lows[-1]['price'] if swing_lows else (entry_price - 1.8 * current_atr)
-        stop_loss  = min(entry_price * 0.992, max(entry_price * 0.955, recent_low * 0.998))
+        # Swing low bazlı veya ATR bazlı güvenli SL
+        struct_sl = swing_lows[-1]['price'] * 0.997 if swing_lows else (entry_price - min_atr_buffer)
+        atr_sl = entry_price - min_atr_buffer
+        
+        # SL'yi yapısal dip ile ATR'ın en mantıklı olanına koy (aşırı uzak veya aşırı yakın olmasın)
+        raw_sl = min(struct_sl, atr_sl)
+        # Sınırlar: Maksimum %6 risk, minimum %1.2 risk
+        stop_loss = max(entry_price * 0.94, min(entry_price - min_atr_buffer, raw_sl))
+        
         risk = entry_price - stop_loss
-        if risk <= 0: risk = entry_price * 0.015; stop_loss = entry_price - risk
-        tp1 = entry_price + risk * 1.5
-        tp2 = entry_price + risk * 2.5
-        tp3 = entry_price + risk * 4.0
+        if risk <= 0:
+            risk = min_atr_buffer
+            stop_loss = entry_price - risk
+            
+        tp1 = round(entry_price + risk * 1.5, 4)
+        tp2 = round(entry_price + risk * 2.5, 4)
+        tp3 = round(entry_price + risk * 4.0, 4)
         rr_ratio = round((tp2 - entry_price) / risk, 2)
+        stop_loss = round(stop_loss, 4)
         is_invalidated = False
     else:
-        recent_high = swing_highs[-1]['price'] if swing_highs else (entry_price + 1.8 * current_atr)
-        stop_loss   = max(entry_price * 1.008, min(entry_price * 1.045, recent_high * 1.002))
+        struct_sl = swing_highs[-1]['price'] * 1.003 if swing_highs else (entry_price + min_atr_buffer)
+        atr_sl = entry_price + min_atr_buffer
+        
+        raw_sl = max(struct_sl, atr_sl)
+        stop_loss = min(entry_price * 1.06, max(entry_price + min_atr_buffer, raw_sl))
+        
         risk = stop_loss - entry_price
-        if risk <= 0: risk = entry_price * 0.015; stop_loss = entry_price + risk
-        tp1 = entry_price - risk * 1.5
-        tp2 = entry_price - risk * 2.5
-        tp3 = entry_price - risk * 4.0
+        if risk <= 0:
+            risk = min_atr_buffer
+            stop_loss = entry_price + risk
+            
+        tp1 = round(entry_price - risk * 1.5, 4)
+        tp2 = round(entry_price - risk * 2.5, 4)
+        tp3 = round(entry_price - risk * 4.0, 4)
         rr_ratio = round((entry_price - tp2) / risk, 2)
+        stop_loss = round(stop_loss, 4)
         is_invalidated = False
 
     if rr_ratio >= 2.0 and confidence_score >= 50:
         confidence_score = min(99, confidence_score + LAYER_WEIGHTS['high_rr_bonus'])
         score_grade, score_desc = _get_super_trader_grade(confidence_score)
         direction_label = f"{'🟢' if is_long else '🔴'} {score_grade} ({direction_str})"
+
 
     # Hassas 24 Saatlik Fiyat Değişimi & 24 Saatlik Toplam Hacim Karşılaştırması
     idx_24h = -24 if len(df) >= 24 else -len(df)

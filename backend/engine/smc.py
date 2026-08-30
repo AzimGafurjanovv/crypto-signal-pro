@@ -17,7 +17,9 @@ def detect_fvg(df: pd.DataFrame, min_gap_percent: float = 0.05) -> List[Dict[str
     n = len(df)
     current_price = closes[-1]
     
-    for i in range(2, n):
+    # Sadece son 80 muma bak (eski anlamsız FVG'leri ele)
+    start_idx = max(2, n - 80)
+    for i in range(start_idx, n):
         # Bullish FVG
         if lows[i] > highs[i - 2]:
             gap_bottom = float(highs[i - 2])
@@ -27,24 +29,29 @@ def detect_fvg(df: pd.DataFrame, min_gap_percent: float = 0.05) -> List[Dict[str
             if gap_size_pct >= min_gap_percent:
                 is_mitigated = False
                 for j in range(i + 1, n):
+                    # Fitil veya kapanışla FVG tabanı delindi mi?
                     if lows[j] <= gap_bottom:
                         is_mitigated = True
                         break
                 
-                is_active_zone = (current_price >= gap_bottom * 0.998 and current_price <= gap_top * 1.002)
+                # Fiyat FVG bölgesinde mi veya hemen yakınında mı?
+                is_active_zone = (current_price >= gap_bottom * 0.999 and current_price <= gap_top * 1.001)
+                dist_pct = round(((current_price - ((gap_top + gap_bottom) / 2)) / current_price) * 100.0, 2)
                 
-                fvgs.append({
-                    'type': 'BULLISH_FVG',
-                    'candle_index': int(i - 1),
-                    'timestamp': int(timestamps[i - 1]) if hasattr(timestamps[i - 1], '__int__') else int(i - 1),
-                    'top': gap_top,
-                    'bottom': gap_bottom,
-                    'mid': (gap_top + gap_bottom) / 2.0,
-                    'size_pct': round(gap_size_pct, 2),
-                    'is_mitigated': is_mitigated,
-                    'is_active_zone': is_active_zone,
-                    'distance_to_price_pct': round(((current_price - ((gap_top + gap_bottom) / 2)) / current_price) * 100.0, 2)
-                })
+                # Sadece makul mesafedeki FVG'leri listele (<= %8)
+                if abs(dist_pct) <= 8.0:
+                    fvgs.append({
+                        'type': 'BULLISH_FVG',
+                        'candle_index': int(i - 1),
+                        'timestamp': int(timestamps[i - 1]) if hasattr(timestamps[i - 1], '__int__') else int(i - 1),
+                        'top': gap_top,
+                        'bottom': gap_bottom,
+                        'mid': (gap_top + gap_bottom) / 2.0,
+                        'size_pct': round(gap_size_pct, 2),
+                        'is_mitigated': is_mitigated,
+                        'is_active_zone': is_active_zone,
+                        'distance_to_price_pct': dist_pct
+                    })
                 
         # Bearish FVG
         elif highs[i] < lows[i - 2]:
@@ -59,42 +66,52 @@ def detect_fvg(df: pd.DataFrame, min_gap_percent: float = 0.05) -> List[Dict[str
                         is_mitigated = True
                         break
                         
-                is_active_zone = (current_price >= gap_bottom * 0.998 and current_price <= gap_top * 1.002)
+                is_active_zone = (current_price >= gap_bottom * 0.999 and current_price <= gap_top * 1.001)
+                dist_pct = round(((((gap_top + gap_bottom) / 2) - current_price) / current_price) * 100.0, 2)
                 
-                fvgs.append({
-                    'type': 'BEARISH_FVG',
-                    'candle_index': int(i - 1),
-                    'timestamp': int(timestamps[i - 1]) if hasattr(timestamps[i - 1], '__int__') else int(i - 1),
-                    'top': gap_top,
-                    'bottom': gap_bottom,
-                    'mid': (gap_top + gap_bottom) / 2.0,
-                    'size_pct': round(gap_size_pct, 2),
-                    'is_mitigated': is_mitigated,
-                    'is_active_zone': is_active_zone,
-                    'distance_to_price_pct': round(((((gap_top + gap_bottom) / 2) - current_price) / current_price) * 100.0, 2)
-                })
+                if abs(dist_pct) <= 8.0:
+                    fvgs.append({
+                        'type': 'BEARISH_FVG',
+                        'candle_index': int(i - 1),
+                        'timestamp': int(timestamps[i - 1]) if hasattr(timestamps[i - 1], '__int__') else int(i - 1),
+                        'top': gap_top,
+                        'bottom': gap_bottom,
+                        'mid': (gap_top + gap_bottom) / 2.0,
+                        'size_pct': round(gap_size_pct, 2),
+                        'is_mitigated': is_mitigated,
+                        'is_active_zone': is_active_zone,
+                        'distance_to_price_pct': dist_pct
+                    })
                 
     return fvgs
 
-def detect_order_blocks(df: pd.DataFrame, lookback: int = 50) -> List[Dict[str, Any]]:
+def detect_order_blocks(df: pd.DataFrame, lookback: int = 60) -> List[Dict[str, Any]]:
     """
     Kurumsal Emir Bloklari (Order Blocks - OB) tespit eder.
+    Hacim + Momentum + Fitil/Kapanis Mitigation kontrolü.
     """
     obs = []
     opens = df['open'].values
     highs = df['high'].values
     lows = df['low'].values
     closes = df['close'].values
+    volumes = df['volume'].values if 'volume' in df.columns else np.ones(len(df))
     timestamps = df['timestamp'].values if 'timestamp' in df.columns else df.index.values
     n = len(df)
     current_price = closes[-1]
+    vol_mean = np.mean(volumes[-30:]) if n >= 30 else 1.0
     
     start_idx = max(2, n - lookback)
     for i in range(start_idx, n - 2):
+        # Bullish OB: Düşüş mumu sonrası yukarı güçlü hacimli displacement
         is_bearish_candle = closes[i] < opens[i]
         strong_displacement_up = False
-        for j in range(2, min(6, n - i)):
+        disp_vol = 1.0
+        
+        for j in range(2, min(7, n - i)):
             if closes[i + j] > highs[i] and closes[i + 1] > opens[i]:
+                # Hacim veya mum gövdesi teyidi
+                disp_vol = np.mean(volumes[i+1:i+j+1]) / max(1e-9, vol_mean)
                 strong_displacement_up = True
                 break
         
@@ -102,13 +119,15 @@ def detect_order_blocks(df: pd.DataFrame, lookback: int = 50) -> List[Dict[str, 
             ob_top = float(highs[i])
             ob_bottom = float(lows[i])
             
+            # Mitigation: Fitil veya kapanış ile OB'nin altına geçilmiş mi?
             is_mitigated = False
             for k in range(i + 3, n):
-                if closes[k] < ob_bottom:
+                if lows[k] < ob_bottom:
                     is_mitigated = True
                     break
                     
-            is_active_zone = (current_price >= ob_bottom * 0.997 and current_price <= ob_top * 1.003)
+            is_active_zone = (current_price >= ob_bottom * 0.998 and current_price <= ob_top * 1.002)
+            dist_pct = round(((current_price - ob_top) / current_price) * 100.0, 2)
             
             obs.append({
                 'type': 'BULLISH_OB',
@@ -117,15 +136,20 @@ def detect_order_blocks(df: pd.DataFrame, lookback: int = 50) -> List[Dict[str, 
                 'top': ob_top,
                 'bottom': ob_bottom,
                 'mid': (ob_top + ob_bottom) / 2.0,
+                'volume_quality': round(float(disp_vol), 2),
                 'is_mitigated': is_mitigated,
                 'is_active_zone': is_active_zone,
-                'distance_pct': round(((current_price - ob_top) / current_price) * 100.0, 2)
+                'distance_pct': dist_pct
             })
             
+        # Bearish OB: Yükseliş mumu sonrası aşağı güçlü displacement
         is_bullish_candle = closes[i] > opens[i]
         strong_displacement_down = False
-        for j in range(2, min(6, n - i)):
+        disp_vol_down = 1.0
+        
+        for j in range(2, min(7, n - i)):
             if closes[i + j] < lows[i] and closes[i + 1] < opens[i]:
+                disp_vol_down = np.mean(volumes[i+1:i+j+1]) / max(1e-9, vol_mean)
                 strong_displacement_down = True
                 break
         
@@ -135,11 +159,12 @@ def detect_order_blocks(df: pd.DataFrame, lookback: int = 50) -> List[Dict[str, 
             
             is_mitigated = False
             for k in range(i + 3, n):
-                if closes[k] > ob_top:
+                if highs[k] > ob_top:
                     is_mitigated = True
                     break
                     
-            is_active_zone = (current_price >= ob_bottom * 0.997 and current_price <= ob_top * 1.003)
+            is_active_zone = (current_price >= ob_bottom * 0.998 and current_price <= ob_top * 1.002)
+            dist_pct = round(((ob_bottom - current_price) / current_price) * 100.0, 2)
             
             obs.append({
                 'type': 'BEARISH_OB',
@@ -148,15 +173,18 @@ def detect_order_blocks(df: pd.DataFrame, lookback: int = 50) -> List[Dict[str, 
                 'top': ob_top,
                 'bottom': ob_bottom,
                 'mid': (ob_top + ob_bottom) / 2.0,
+                'volume_quality': round(float(disp_vol_down), 2),
                 'is_mitigated': is_mitigated,
                 'is_active_zone': is_active_zone,
-                'distance_pct': round(((ob_bottom - current_price) / current_price) * 100.0, 2)
+                'distance_pct': dist_pct
             })
             
     return obs
 
 def detect_market_structure(df: pd.DataFrame) -> Dict[str, Any]:
-    """Piyasa Yapisi Kirilimlarini (BOS) ve Likidite Temizliklerini (Sweeps) tespit eder."""
+    """
+    Piyasa Yapisi Kirilimlarini (BOS), Karakter Degisimini (CHoCH) ve Likidite Temizliklerini (Sweeps) tespit eder.
+    """
     swing_highs, swing_lows = find_swing_points(df, window=4)
     closes = df['close'].values
     highs = df['high'].values
@@ -164,19 +192,34 @@ def detect_market_structure(df: pd.DataFrame) -> Dict[str, Any]:
     n = len(df)
     
     bos_events = []
+    choch_events = []
     liquidity_sweeps = []
     
-    for sh in swing_highs[-5:]:
+    # 1. Swing High Kırılımları (BOS / CHoCH / Sweeps)
+    for idx_sh, sh in enumerate(swing_highs[-6:]):
         sh_idx = sh['index']
         sh_price = sh['price']
         for i in range(sh_idx + 1, n):
             if closes[i] > sh_price:
-                bos_events.append({
-                    'type': 'BULLISH_BOS',
-                    'broken_level': sh_price,
-                    'break_candle': int(i),
-                    'recency_bars': int(n - 1 - i)
-                })
+                # Eğer önceki yapı düşüş yönlüyse (Lower High kırılıyorsa) bu bir CHoCH (Trend Dönüşü)
+                is_choch = False
+                if idx_sh > 0 and sh_price < swing_highs[max(0, len(swing_highs) - 6 + idx_sh - 1)]['price']:
+                    is_choch = True
+                
+                if is_choch:
+                    choch_events.append({
+                        'type': 'BULLISH_CHOCH',
+                        'broken_level': sh_price,
+                        'break_candle': int(i),
+                        'recency_bars': int(n - 1 - i)
+                    })
+                else:
+                    bos_events.append({
+                        'type': 'BULLISH_BOS',
+                        'broken_level': sh_price,
+                        'break_candle': int(i),
+                        'recency_bars': int(n - 1 - i)
+                    })
                 break
             elif highs[i] > sh_price and closes[i] <= sh_price:
                 liquidity_sweeps.append({
@@ -186,17 +229,30 @@ def detect_market_structure(df: pd.DataFrame) -> Dict[str, Any]:
                     'recency_bars': int(n - 1 - i)
                 })
                 
-    for sl in swing_lows[-5:]:
+    # 2. Swing Low Kırılımları (BOS / CHoCH / Sweeps)
+    for idx_sl, sl in enumerate(swing_lows[-6:]):
         sl_idx = sl['index']
         sl_price = sl['price']
         for i in range(sl_idx + 1, n):
             if closes[i] < sl_price:
-                bos_events.append({
-                    'type': 'BEARISH_BOS',
-                    'broken_level': sl_price,
-                    'break_candle': int(i),
-                    'recency_bars': int(n - 1 - i)
-                })
+                is_choch = False
+                if idx_sl > 0 and sl_price > swing_lows[max(0, len(swing_lows) - 6 + idx_sl - 1)]['price']:
+                    is_choch = True
+                    
+                if is_choch:
+                    choch_events.append({
+                        'type': 'BEARISH_CHOCH',
+                        'broken_level': sl_price,
+                        'break_candle': int(i),
+                        'recency_bars': int(n - 1 - i)
+                    })
+                else:
+                    bos_events.append({
+                        'type': 'BEARISH_BOS',
+                        'broken_level': sl_price,
+                        'break_candle': int(i),
+                        'recency_bars': int(n - 1 - i)
+                    })
                 break
             elif lows[i] < sl_price and closes[i] >= sl_price:
                 liquidity_sweeps.append({
@@ -206,11 +262,13 @@ def detect_market_structure(df: pd.DataFrame) -> Dict[str, Any]:
                     'recency_bars': int(n - 1 - i)
                 })
                 
-    recent_bos = [b for b in bos_events if b['recency_bars'] <= 12]
-    recent_sweeps = [s for s in liquidity_sweeps if s['recency_bars'] <= 8]
+    recent_bos = [b for b in bos_events if b['recency_bars'] <= 35]
+    recent_choch = [c for c in choch_events if c['recency_bars'] <= 35]
+    recent_sweeps = [s for s in liquidity_sweeps if s['recency_bars'] <= 15]
     
     return {
         'recent_bos': recent_bos,
+        'recent_choch': recent_choch,
         'recent_sweeps': recent_sweeps,
         'swing_highs': swing_highs[-4:],
         'swing_lows': swing_lows[-4:]
@@ -227,8 +285,8 @@ def analyze_smc(df: pd.DataFrame) -> Dict[str, Any]:
     active_bullish_fvgs = [f for f in unmitigated_bullish_fvgs if f['is_active_zone']]
     active_bearish_fvgs = [f for f in unmitigated_bearish_fvgs if f['is_active_zone']]
     
-    active_bullish_obs = [o for o in obs if o['type'] == 'BULLISH_OB' and not o['is_mitigated'] and (o['is_active_zone'] or abs(o['distance_pct']) <= 1.5)][-2:]
-    active_bearish_obs = [o for o in obs if o['type'] == 'BEARISH_OB' and not o['is_mitigated'] and (o['is_active_zone'] or abs(o['distance_pct']) <= 1.5)][-2:]
+    active_bullish_obs = [o for o in obs if o['type'] == 'BULLISH_OB' and not o['is_mitigated'] and (o['is_active_zone'] or abs(o['distance_pct']) <= 1.2)][-2:]
+    active_bearish_obs = [o for o in obs if o['type'] == 'BEARISH_OB' and not o['is_mitigated'] and (o['is_active_zone'] or abs(o['distance_pct']) <= 1.2)][-2:]
     
     return {
         'all_fvgs': fvgs[-10:],
@@ -241,3 +299,4 @@ def analyze_smc(df: pd.DataFrame) -> Dict[str, Any]:
         'active_bearish_obs': active_bearish_obs,
         'structure': structure
     }
+

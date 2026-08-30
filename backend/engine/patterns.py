@@ -315,6 +315,11 @@ def detect_chart_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
                             bo_lvl = upper_now if is_bull else lower_now
                             target = current_price + height if is_bull else current_price - height
                             
+                            # Kırılım gücü ve hacme göre dinamik kalite skoru
+                            breakout_strength = abs(current_price - bo_lvl) / current_price * 100.0
+                            vol_bonus = 12 if vol_boost else 0
+                            quality = int(min(100, 70 + (breakout_strength * 50) + vol_bonus))
+                            
                             line_upper = _two_point_line(df, p1['index'], n - 1, upper_start, upper_now)
                             line_lower = _two_point_line(df, v1['index'], n - 1, lower_start, lower_now)
                             
@@ -322,7 +327,7 @@ def detect_chart_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
                                 'name': f'Simetrik Üçgen / Flama ({pat_type})',
                                 'type': pat_type,
                                 'category': '2. Simetrik Üçgen / Pennant',
-                                'quality_score': 88,
+                                'quality_score': quality,
                                 'breakout_level': round(bo_lvl, 4),
                                 'target': round(target, 4),
                                 'description': f'Geometrik simetrik üçgen (${lower_now:,.4f} - ${upper_now:,.4f}) bandından {pat_type} çıkış gerçekleşti. Hedef: ${target:,.4f}',
@@ -503,8 +508,10 @@ def detect_chart_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
         range_height = range_high - range_low
         start_idx = max(0, n - look)
 
-        # A. Range Ust Kirilimi (Hacim veya retest teyidi ile)
-        if current_price >= range_high * 0.998 and df['low'].iloc[-4:].min() <= range_high + 0.25 * current_atr:
+        # A. Range Ust Kirilimi (Hacim ve retest teyidi ile)
+        if (current_price >= range_high * 0.998 and 
+            df['low'].iloc[-4:].min() <= range_high + 0.25 * current_atr and 
+            vol_boost):
             target = range_high + range_height
             line_top = _horizontal_line(df, start_idx, n - 1, range_high)
             line_bot = _horizontal_line(df, start_idx, n - 1, range_low)
@@ -525,7 +532,9 @@ def detect_chart_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
             })
         
         # B. Range Likidite Sapmasi (Ayı Tuzağı)
-        elif df['low'].iloc[-6:].min() < range_low * 0.992 and current_price >= range_low * 1.002:
+        elif (df['low'].iloc[-6:].min() < range_low * 0.992 and 
+              current_price >= range_low * 1.002 and 
+              vol_boost):
             target = range_high
             line_top = _horizontal_line(df, start_idx, n - 1, range_high)
             line_bot = _horizontal_line(df, start_idx, n - 1, range_low)

@@ -34,12 +34,12 @@ def detect_fvg(df: pd.DataFrame, min_gap_percent: float = 0.05) -> List[Dict[str
                         is_mitigated = True
                         break
                 
-                # Fiyat FVG bölgesinde mi veya hemen yakınında mı?
-                is_active_zone = (current_price >= gap_bottom * 0.999 and current_price <= gap_top * 1.001)
+                # Fiyat FVG bölgesinde mi veya hemen yakınında mı? (%0.5 tolerans)
+                is_active_zone = (current_price >= gap_bottom * 0.995 and current_price <= gap_top * 1.005)
                 dist_pct = round(((current_price - ((gap_top + gap_bottom) / 2)) / current_price) * 100.0, 2)
                 
-                # Sadece makul mesafedeki FVG'leri listele (<= %8)
-                if abs(dist_pct) <= 8.0:
+                # Sadece FVG aktif bölgesinde veya %3.5 içindekileri al
+                if is_active_zone or abs(dist_pct) <= 3.5:
                     fvgs.append({
                         'type': 'BULLISH_FVG',
                         'candle_index': int(i - 1),
@@ -66,10 +66,10 @@ def detect_fvg(df: pd.DataFrame, min_gap_percent: float = 0.05) -> List[Dict[str
                         is_mitigated = True
                         break
                         
-                is_active_zone = (current_price >= gap_bottom * 0.999 and current_price <= gap_top * 1.001)
+                is_active_zone = (current_price >= gap_bottom * 0.995 and current_price <= gap_top * 1.005)
                 dist_pct = round(((((gap_top + gap_bottom) / 2) - current_price) / current_price) * 100.0, 2)
                 
-                if abs(dist_pct) <= 8.0:
+                if is_active_zone or abs(dist_pct) <= 3.5:
                     fvgs.append({
                         'type': 'BEARISH_FVG',
                         'candle_index': int(i - 1),
@@ -110,9 +110,11 @@ def detect_order_blocks(df: pd.DataFrame, lookback: int = 60) -> List[Dict[str, 
         
         for j in range(2, min(7, n - i)):
             if closes[i + j] > highs[i] and closes[i + 1] > opens[i]:
-                # Hacim veya mum gövdesi teyidi
-                disp_vol = np.mean(volumes[i+1:i+j+1]) / max(1e-9, vol_mean)
-                strong_displacement_up = True
+                # En az 1 displacement mumu hacimli olmalı (>= 1.3x ortalama)
+                disp_vols = volumes[i+1:i+j+1] / max(1e-9, vol_mean)
+                has_strong_vol = bool(np.any(disp_vols >= 1.3))
+                disp_vol = float(np.mean(disp_vols))
+                strong_displacement_up = has_strong_vol
                 break
         
         if is_bearish_candle and strong_displacement_up:
@@ -149,8 +151,10 @@ def detect_order_blocks(df: pd.DataFrame, lookback: int = 60) -> List[Dict[str, 
         
         for j in range(2, min(7, n - i)):
             if closes[i + j] < lows[i] and closes[i + 1] < opens[i]:
-                disp_vol_down = np.mean(volumes[i+1:i+j+1]) / max(1e-9, vol_mean)
-                strong_displacement_down = True
+                disp_vols_down = volumes[i+1:i+j+1] / max(1e-9, vol_mean)
+                has_strong_vol_down = bool(np.any(disp_vols_down >= 1.3))
+                disp_vol_down = float(np.mean(disp_vols_down))
+                strong_displacement_down = has_strong_vol_down
                 break
         
         if is_bullish_candle and strong_displacement_down:
@@ -201,10 +205,15 @@ def detect_market_structure(df: pd.DataFrame) -> Dict[str, Any]:
         sh_price = sh['price']
         for i in range(sh_idx + 1, n):
             if closes[i] > sh_price:
-                # Eğer önceki yapı düşüş yönlüyse (Lower High kırılıyorsa) bu bir CHoCH (Trend Dönüşü)
+                # CHoCH = Önceki Lower High'ın yukarı kırılması + düşüş trendi yapısı
                 is_choch = False
-                if idx_sh > 0 and sh_price < swing_highs[max(0, len(swing_highs) - 6 + idx_sh - 1)]['price']:
-                    is_choch = True
+                if idx_sh > 0:
+                    prev_sh = swing_highs[max(0, len(swing_highs) - 6 + idx_sh - 1)]
+                    prev_sl_idx = max(0, len(swing_lows) - 6 + idx_sh - 1)
+                    if prev_sl_idx < len(swing_lows):
+                        is_lower_high_structure = sh_price < prev_sh['price']
+                        is_downtrend_structure = swing_lows[prev_sl_idx]['price'] < swing_lows[max(0, prev_sl_idx - 1)]['price'] if prev_sl_idx > 0 else True
+                        is_choch = is_lower_high_structure and is_downtrend_structure
                 
                 if is_choch:
                     choch_events.append({
@@ -235,9 +244,15 @@ def detect_market_structure(df: pd.DataFrame) -> Dict[str, Any]:
         sl_price = sl['price']
         for i in range(sl_idx + 1, n):
             if closes[i] < sl_price:
+                # CHoCH = Önceki Higher Low'un aşağı kırılması + yükseliş trendi yapısı
                 is_choch = False
-                if idx_sl > 0 and sl_price > swing_lows[max(0, len(swing_lows) - 6 + idx_sl - 1)]['price']:
-                    is_choch = True
+                if idx_sl > 0:
+                    prev_sl = swing_lows[max(0, len(swing_lows) - 6 + idx_sl - 1)]
+                    prev_sh_idx = max(0, len(swing_highs) - 6 + idx_sl - 1)
+                    if prev_sh_idx < len(swing_highs):
+                        is_higher_low_structure = sl_price > prev_sl['price']
+                        is_uptrend_structure = swing_highs[prev_sh_idx]['price'] > swing_highs[max(0, prev_sh_idx - 1)]['price'] if prev_sh_idx > 0 else True
+                        is_choch = is_higher_low_structure and is_uptrend_structure
                     
                 if is_choch:
                     choch_events.append({

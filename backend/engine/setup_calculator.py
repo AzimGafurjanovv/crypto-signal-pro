@@ -13,9 +13,10 @@ from .mtf_analysis import analyze_all_timeframes
 # =============================================================================
 LAYER_WEIGHTS = {
     # Katman 1: Trend & Piyasa Yapısı (Max 30)
-    'htf_trend_alignment':  12,  # 4h ve 1d ana trend ile tam uyum
-    'ema_ribbon_structure': 10,  # Fiyat > EMA20 > EMA50 > EMA200 tam hizalama
-    'market_structure_bos':  8,  # BOS (Break of Structure) onaylanmış piyasa yapısı
+    'htf_trend_alignment':   12,  # 4h ve 1d ana trend ile tam uyum
+    'ema_ribbon_structure':  10,  # Fiyat > EMA20 > EMA50 > EMA200 tam hizalama
+    'market_structure_bos':   8,  # BOS (Break of Structure) onaylanmış piyasa yapısı
+    'market_structure_choch': 10, # CHoCH (Change of Character) — trend dönüşü konfluensi
 
     # Katman 2: SMC & Kurumsal Likidite (Max 25)
     'order_block_test':     10,  # Taze Order Block bölgesine temas/retest
@@ -80,6 +81,13 @@ def _evaluate_super_trader_long(
     else:
         supports_resistances.append({'type': 'DİRENÇ', 'name': 'EMA 20', 'price': ema20})
         supports_resistances.append({'type': 'DİRENÇ', 'name': 'EMA 50', 'price': ema50})
+
+    bullish_choch = [c for c in smc_data['structure'].get('recent_choch', []) if c['type'] == 'BULLISH_CHOCH']
+    if bullish_choch:
+        score += LAYER_WEIGHTS['market_structure_choch']
+        strategies.append("Bullish CHoCH Trend Dönüşü")
+        long_reasons.append(f"Piyasa Karakteri Değişimi (CHoCH): Fiyat ${bullish_choch[0]['broken_level']:,.4f} seviyesini kırarak yeni boğa yapısı başlattı.")
+        supports_resistances.append({'type': 'DESTEK', 'name': 'CHoCH Kırılım Desteği', 'price': bullish_choch[0]['broken_level']})
 
     bullish_bos = [b for b in smc_data['structure']['recent_bos'] if b['type'] == 'BULLISH_BOS']
     if bullish_bos:
@@ -208,6 +216,13 @@ def _evaluate_super_trader_short(
         supports_resistances.append({'type': 'DESTEK', 'name': 'EMA 20', 'price': ema20})
         supports_resistances.append({'type': 'DESTEK', 'name': 'EMA 50', 'price': ema50})
 
+    bearish_choch = [c for c in smc_data['structure'].get('recent_choch', []) if c['type'] == 'BEARISH_CHOCH']
+    if bearish_choch:
+        score += LAYER_WEIGHTS['market_structure_choch']
+        strategies.append("Bearish CHoCH Trend Dönüşü")
+        short_reasons.append(f"Piyasa Karakteri Değişimi (CHoCH): Fiyat ${bearish_choch[0]['broken_level']:,.4f} seviyesini kırarak yeni ayı yapısı başlattı.")
+        supports_resistances.append({'type': 'DİRENÇ', 'name': 'CHoCH Kırılım Direnci', 'price': bearish_choch[0]['broken_level']})
+
     bearish_bos = [b for b in smc_data['structure']['recent_bos'] if b['type'] == 'BEARISH_BOS']
     if bearish_bos:
         score += LAYER_WEIGHTS['market_structure_bos']
@@ -304,9 +319,9 @@ def _get_super_trader_grade(score: int) -> Tuple[str, str]:
         return "🟢 A SINIFI SETUP", "Yüksek başarı olasılığı! Güçlü teknik ve kurumsal onaylar mevcut."
     elif score >= 55:
         return "🟡 B SINIFI SETUP", "Orta derece konfluens. Şartlı ve disiplinli pozisyon yönetimi gerekli."
-    elif score >= 30:
+    elif score >= 40:
         return "🟠 C SINIFI SETUP", "Zayıf teyitler. İşlem riski yüksek."
-    return "⚪ ZAYIF / BAŞLANGIÇ SETUP", "Çok düşük güven skoru (%1 - %29)."
+    return "⚪ ZAYIF / BAŞLANGIÇ SETUP", "Çok düşük güven skoru (%1 - %39)."
 
 
 def calculate_crypto_setup(
@@ -355,8 +370,10 @@ def calculate_crypto_setup(
     score_diff = abs(l_score - s_score)
     max_raw_score = max(l_score, s_score)
     
-    # İki taraf da birbirine çok yakınsa ve skor düşükse piyasa kararsızdır
-    if max_raw_score < 32 or (score_diff < 4 and max_raw_score < 45):
+    # ✅ Çok düşük skor (< 40) veya netlik yoksa (fark < 6 ve skor < 50) iptal
+    if max_raw_score < 40:
+        return None
+    if score_diff < 6 and max_raw_score < 50:
         return None
 
     is_long = l_score >= s_score
@@ -374,7 +391,7 @@ def calculate_crypto_setup(
 
     score_grade, score_desc = _get_super_trader_grade(confidence_score)
 
-    if confidence_score < min_confidence or confidence_score < 30:
+    if confidence_score < min_confidence or confidence_score < 35:
         return None
 
     if not strategies:

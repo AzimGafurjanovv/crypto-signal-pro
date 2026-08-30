@@ -30,9 +30,9 @@
                 <div>
                     <h1 class="text-lg sm:text-xl font-bold bg-gradient-to-r from-white via-gray-200 to-indigo-400 bg-clip-text text-transparent flex items-center gap-2">
                         <span>Trade Günlüğü & Notlar</span>
-                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 font-semibold border border-indigo-500/30">PRO</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 font-semibold border border-indigo-500/30">PRO v2.0</span>
                     </h1>
-                    <p class="text-xs text-gray-400 hidden sm:block">Pozisyon Takibi, Performans Analizi & Fiyat Hedef Alarmları</p>
+                    <p class="text-xs text-gray-400 hidden sm:block">Kasa & Kaldıraç Takibi, Takvim Bazlı Performans & Canlı Alarmlar</p>
                 </div>
             </div>
 
@@ -78,86 +78,112 @@
         <!-- ============================================================= -->
         <section id="sectionJournal" class="space-y-6">
 
-            <!-- 📊 PERFORMANS & KPI ÖZET KARTLARI -->
+            <!-- 💰 KASA / DEPOZİTO & PERFORMANS KPI ÖZET KARTLARI -->
             <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <!-- 1. Kasa / Bakiye -->
+                <div class="glass-panel p-3.5 rounded-2xl border border-indigo-500/40 text-center relative overflow-hidden group">
+                    <div class="text-[10px] text-indigo-300 font-sans flex items-center justify-center gap-1">
+                        <span>GÜNCEL KASA (BAKİYE)</span>
+                        <button onclick="openDepositModal()" title="Başlangıç Depozitosunu Ayarla" class="text-indigo-400 hover:text-white transition">
+                            <i data-lucide="pencil" class="w-3 h-3"></i>
+                        </button>
+                    </div>
+                    <div id="statCurrentBalance" class="text-xl sm:text-2xl font-black text-white font-mono mt-0.5">$0.00</div>
+                    <div id="statInitialDepositHint" class="text-[9px] text-gray-400 font-mono">Depozito: $1,000</div>
+                </div>
+
+                <!-- 2. Kasa Büyümesi -->
+                <div class="glass-panel p-3.5 rounded-2xl border border-emerald-500/30 text-center glow-emerald">
+                    <div class="text-[10px] text-emerald-300 font-sans">KASA BÜYÜMESİ</div>
+                    <div id="statAccountGrowth" class="text-xl sm:text-2xl font-black text-emerald-400 font-mono mt-0.5">%0.0</div>
+                    <div id="statTotalPnlAmount" class="text-[9px] text-emerald-400/80 font-mono">+$0.00 Net</div>
+                </div>
+
+                <!-- 3. Kazanma Oranı -->
+                <div class="glass-panel p-3.5 rounded-2xl border border-cyan-500/30 text-center">
+                    <div class="text-[10px] text-cyan-300 font-sans">KAZANMA ORANI (WIN)</div>
+                    <div id="statWinRate" class="text-xl sm:text-2xl font-black text-cyan-400 font-mono mt-0.5">%0.0</div>
+                    <div id="statWinCount" class="text-[9px] text-cyan-400/80 font-sans">0 Kazanç / 0 Kayıp</div>
+                </div>
+
+                <!-- 4. Toplam & Açık İşlemler -->
                 <div class="glass-panel p-3.5 rounded-2xl border border-gray-800 text-center">
                     <div class="text-[10px] text-gray-400 font-sans">TOPLAM İŞLEM</div>
                     <div id="statTotalTrades" class="text-xl sm:text-2xl font-black text-white font-mono mt-0.5">0</div>
-                    <div class="text-[9px] text-gray-500 font-sans">Kayıtlı Pozisyon</div>
+                    <div id="statOpenTradesHint" class="text-[9px] text-cyan-400 font-sans">0 Açık Pozisyon</div>
                 </div>
 
-                <div class="glass-panel p-3.5 rounded-2xl border border-cyan-500/30 text-center">
-                    <div class="text-[10px] text-cyan-300 font-sans">AÇIK İŞLEMLER</div>
-                    <div id="statOpenTrades" class="text-xl sm:text-2xl font-black text-cyan-400 font-mono mt-0.5">0</div>
-                    <div class="text-[9px] text-cyan-400/70 font-sans">Canlı Takipte</div>
+                <!-- 5. Ortalama Kaldıraç & R:R -->
+                <div class="glass-panel p-3.5 rounded-2xl border border-purple-500/30 text-center">
+                    <div class="text-[10px] text-purple-300 font-sans">ORT. KALDIRAÇ / R:R</div>
+                    <div id="statAvgLeverage" class="text-xl sm:text-2xl font-black text-purple-400 font-mono mt-0.5">1x</div>
+                    <div id="statAvgRR" class="text-[9px] text-purple-400/70 font-sans">0.0 R Ortalama</div>
                 </div>
 
-                <div class="glass-panel p-3.5 rounded-2xl border border-emerald-500/30 text-center glow-emerald">
-                    <div class="text-[10px] text-emerald-300 font-sans">KAZANMA ORANI (WIN)</div>
-                    <div id="statWinRate" class="text-xl sm:text-2xl font-black text-emerald-400 font-mono mt-0.5">%0.0</div>
-                    <div id="statWinCount" class="text-[9px] text-emerald-400/80 font-sans">0 Kazanç / 0 Kayıp</div>
-                </div>
-
-                <div class="glass-panel p-3.5 rounded-2xl border border-indigo-500/30 text-center glow-indigo">
-                    <div class="text-[10px] text-indigo-300 font-sans">NET KÂR / ZARAR (%)</div>
-                    <div id="statTotalPnlPct" class="text-xl sm:text-2xl font-black text-indigo-300 font-mono mt-0.5">%0.0</div>
-                    <div id="statTotalPnlAmount" class="text-[9px] text-gray-400 font-mono">$0.00 Net</div>
-                </div>
-
+                <!-- 6. Kâr Faktörü -->
                 <div class="glass-panel p-3.5 rounded-2xl border border-amber-500/30 text-center">
                     <div class="text-[10px] text-amber-300 font-sans">KÂR FAKTÖRÜ (PF)</div>
                     <div id="statProfitFactor" class="text-xl sm:text-2xl font-black text-amber-400 font-mono mt-0.5">0.00</div>
                     <div class="text-[9px] text-amber-400/70 font-sans">Kazanç/Kayıp Oranı</div>
                 </div>
-
-                <div class="glass-panel p-3.5 rounded-2xl border border-purple-500/30 text-center">
-                    <div class="text-[10px] text-purple-300 font-sans">ORTALAMA R:R</div>
-                    <div id="statAvgRR" class="text-xl sm:text-2xl font-black text-purple-400 font-mono mt-0.5">0.0 R</div>
-                    <div class="text-[9px] text-purple-400/70 font-sans">Planlanan Risk/Ödül</div>
-                </div>
             </div>
 
-            <!-- 🎛️ FİLTRELEME & İŞLEM EKLEME ÇUBUĞU -->
-            <div class="glass-panel rounded-2xl border border-gray-800 p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-xl">
+            <!-- 🎛️ GÖRÜNÜM SEÇİCİ & FİLTRELEME & İŞLEM EKLEME ÇUBUĞU -->
+            <div class="glass-panel rounded-2xl border border-gray-800 p-4 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 shadow-xl">
+                
+                <!-- Sol: 1. Liste vs 2. Takvim Görünüm Butonları -->
+                <div class="flex items-center p-1 rounded-xl bg-gray-950 border border-gray-800 text-xs font-bold gap-1 self-start sm:self-auto">
+                    <button id="viewListBtn" onclick="switchJournalView('list')" class="px-3.5 py-2 rounded-lg bg-indigo-600 text-white transition flex items-center gap-1.5 shadow-sm">
+                        <i data-lucide="list" class="w-3.5 h-3.5"></i>
+                        <span>📋 1. Liste / Tablo Görünümü</span>
+                    </button>
+                    <button id="viewCalendarBtn" onclick="switchJournalView('calendar')" class="px-3.5 py-2 rounded-lg text-gray-400 hover:text-white transition flex items-center gap-1.5">
+                        <i data-lucide="calendar-days" class="w-3.5 h-3.5 text-amber-400"></i>
+                        <span>📅 2. Takvim Bazlı Günlük</span>
+                    </button>
+                </div>
+
+                <!-- Orta / Sağ: Filtreler & İşlem Ekle -->
                 <div class="flex flex-wrap items-center gap-2">
-                    <!-- Durum Filtre Butonları -->
-                    <div class="flex items-center p-1 rounded-xl bg-gray-950 border border-gray-800 text-xs font-bold gap-1 overflow-x-auto">
-                        <button onclick="filterJournalByStatus('ALL')" class="journal-filter-btn px-3 py-1.5 rounded-lg bg-indigo-600 text-white transition" data-status="ALL">Tümü</button>
-                        <button onclick="filterJournalByStatus('OPEN')" class="journal-filter-btn px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition" data-status="OPEN">🟢 Açık</button>
-                        <button onclick="filterJournalByStatus('WIN_TP')" class="journal-filter-btn px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition" data-status="WIN_TP">🎯 Kâr (TP)</button>
-                        <button onclick="filterJournalByStatus('LOSS_SL')" class="journal-filter-btn px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition" data-status="LOSS_SL">🛑 Zarar (SL)</button>
-                        <button onclick="filterJournalByStatus('CLOSED')" class="journal-filter-btn px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition" data-status="CLOSED">⚪ Kapatıldı</button>
+                    <!-- Durum Filtre Butonları (Sadece Liste Görünümünde) -->
+                    <div id="journalStatusFilterGroup" class="flex items-center p-1 rounded-xl bg-gray-950 border border-gray-800 text-xs font-bold gap-1 overflow-x-auto">
+                        <button onclick="filterJournalByStatus('ALL')" class="journal-filter-btn px-2.5 py-1 rounded-lg bg-indigo-600 text-white transition" data-status="ALL">Tümü</button>
+                        <button onclick="filterJournalByStatus('OPEN')" class="journal-filter-btn px-2.5 py-1 rounded-lg text-gray-400 hover:text-white transition" data-status="OPEN">🟢 Açık</button>
+                        <button onclick="filterJournalByStatus('WIN_TP')" class="journal-filter-btn px-2.5 py-1 rounded-lg text-gray-400 hover:text-white transition" data-status="WIN_TP">🎯 Kâr</button>
+                        <button onclick="filterJournalByStatus('LOSS_SL')" class="journal-filter-btn px-2.5 py-1 rounded-lg text-gray-400 hover:text-white transition" data-status="LOSS_SL">🛑 Stop</button>
                     </div>
 
                     <!-- Arama Çubuğu -->
-                    <div class="relative flex-1 sm:w-48">
+                    <div class="relative flex-1 sm:w-40">
                         <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"></i>
-                        <input id="journalSearchInput" oninput="applyJournalFilters()" type="text" placeholder="Coin ara (BTC, SOL)..." class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono">
+                        <input id="journalSearchInput" oninput="applyJournalFilters()" type="text" placeholder="Coin ara..." class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-8 pr-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono">
                     </div>
-                </div>
 
-                <!-- ➕ YENİ İŞLEM EKLE BUTONU -->
-                <button onclick="openNewTradeModal()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-500 hover:to-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/20 active:scale-95 transition cursor-pointer">
-                    <i data-lucide="plus-circle" class="w-4 h-4"></i>
-                    <span>+ Yeni İşlem Kaydet</span>
-                </button>
+                    <!-- ➕ YENİ İŞLEM EKLE BUTONU -->
+                    <button onclick="openNewTradeModal()" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-500 hover:to-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/20 active:scale-95 transition cursor-pointer">
+                        <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                        <span>+ Yeni İşlem</span>
+                    </button>
+                </div>
             </div>
 
-            <!-- 📋 İŞLEMLER LİSTESİ / TABLOSU -->
-            <div class="glass-panel rounded-3xl border border-gray-800 overflow-hidden shadow-2xl">
+            <!-- ========================================================= -->
+            <!-- 📋 GÖRÜNÜM 1: LİSTE / TABLO GÖRÜNÜMÜ -->
+            <!-- ========================================================= -->
+            <div id="journalListView" class="glass-panel rounded-3xl border border-gray-800 overflow-hidden shadow-2xl">
                 <!-- Desktop Tablo Görünümü -->
                 <div class="hidden md:block overflow-x-auto">
                     <table class="w-full text-left text-xs font-sans">
                         <thead class="bg-gray-950/80 border-b border-gray-800 text-gray-400 font-mono uppercase tracking-wider text-[11px]">
                             <tr>
                                 <th class="p-3.5">Parite / Tarih</th>
-                                <th class="p-3.5">Yön</th>
+                                <th class="p-3.5">Yön & Kaldıraç</th>
+                                <th class="p-3.5">Marjin & Pozisyon</th>
                                 <th class="p-3.5">Giriş / SL / TP</th>
-                                <th class="p-3.5">Çıkış Fiyatı</th>
-                                <th class="p-3.5">R:R</th>
-                                <th class="p-3.5">Net Kâr (PnL)</th>
+                                <th class="p-3.5">Çıkış</th>
+                                <th class="p-3.5">Net PnL ($ / ROE)</th>
                                 <th class="p-3.5">Durum</th>
-                                <th class="p-3.5">Strateji & Not</th>
+                                <th class="p-3.5">Strateji</th>
                                 <th class="p-3.5 text-right">Aksiyon</th>
                             </tr>
                         </thead>
@@ -179,8 +205,55 @@
                     </div>
                     <div class="text-sm font-bold text-gray-400">Henüz kayıtlı bir işlem bulunamadı.</div>
                     <p class="text-xs text-gray-500 max-w-sm mx-auto">
-                        Yukarıdaki <strong>"+ Yeni İşlem Kaydet"</strong> butonuna tıklayarak ilk işleminizi günlüğe ekleyebilirsiniz.
+                        Yukarıdaki <strong>"+ Yeni İşlem"</strong> butonuna tıklayarak ilk pozisyonunuzu ekleyebilirsiniz.
                     </p>
+                </div>
+            </div>
+
+            <!-- ========================================================= -->
+            <!-- 📅 GÖRÜNÜM 2: TAKVİM BAZLI GÜNLÜK GÖRÜNÜMÜ (TRADING CALENDAR) -->
+            <!-- ========================================================= -->
+            <div id="journalCalendarView" class="hidden space-y-4">
+                <!-- Takvim Başlığı ve Ay Değiştirici -->
+                <div class="glass-panel rounded-2xl border border-gray-800 p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl">
+                    <div class="flex items-center gap-2">
+                        <button onclick="changeCalendarMonth(-1)" class="p-2 rounded-xl bg-gray-950 border border-gray-800 hover:bg-gray-800 text-gray-300 transition">
+                            <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                        </button>
+                        <h3 id="calendarMonthTitle" class="text-base font-black text-white font-mono px-3">Ağustos 2026</h3>
+                        <button onclick="changeCalendarMonth(1)" class="p-2 rounded-xl bg-gray-950 border border-gray-800 hover:bg-gray-800 text-gray-300 transition">
+                            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                        </button>
+                        <button onclick="goToCurrentMonth()" class="px-3 py-1.5 rounded-xl bg-indigo-500/20 text-indigo-300 font-bold text-xs border border-indigo-500/40 hover:bg-indigo-500/30 transition">
+                            Bu Ay
+                        </button>
+                    </div>
+
+                    <!-- Ay Özeti Rozeti -->
+                    <div id="calendarMonthSummaryBadge" class="flex items-center gap-3 text-xs font-mono">
+                        <span class="text-gray-400">Bu Ayın Toplamı:</span>
+                        <span id="calendarMonthPnlText" class="font-black text-sm text-emerald-400">+$0.00</span>
+                        <span id="calendarMonthTradesText" class="text-gray-400">(0 İşlem)</span>
+                    </div>
+                </div>
+
+                <!-- 🗓️ TAKVİM IZGARASI -->
+                <div class="glass-panel rounded-3xl border border-gray-800 p-4 shadow-2xl overflow-hidden">
+                    <!-- Gün İsimleri Başlığı -->
+                    <div class="grid grid-cols-7 gap-2 mb-2 text-center text-xs font-mono font-bold text-gray-400">
+                        <div class="p-2">Pzt</div>
+                        <div class="p-2">Sal</div>
+                        <div class="p-2">Çar</div>
+                        <div class="p-2">Per</div>
+                        <div class="p-2">Cum</div>
+                        <div class="p-2 text-cyan-400">Cmt</div>
+                        <div class="p-2 text-cyan-400">Paz</div>
+                    </div>
+
+                    <!-- Gün Hücreleri Konteyneri -->
+                    <div id="calendarGridDays" class="grid grid-cols-7 gap-2">
+                        <!-- JS ile takvim hücreleri dolacak -->
+                    </div>
                 </div>
             </div>
 
@@ -269,6 +342,7 @@
             <form id="tradeForm" onsubmit="handleTradeFormSubmit(event)" class="p-5 overflow-y-auto space-y-4 text-xs font-sans">
                 <input type="hidden" id="tradeFormId">
 
+                <!-- 🪙 PARİTE VE YÖN -->
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <div class="flex items-center justify-between mb-1">
@@ -286,18 +360,60 @@
                             <button type="button" onclick="selectSymbol('XRP/USDT', 'trade')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">XRP</button>
                             <button type="button" onclick="selectSymbol('DOGE/USDT', 'trade')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">DOGE</button>
                             <button type="button" onclick="selectSymbol('BNB/USDT', 'trade')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">BNB</button>
-                            <button type="button" onclick="selectSymbol('SUI/USDT', 'trade')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">SUI</button>
                         </div>
                     </div>
                     <div>
                         <label class="block text-gray-400 font-medium mb-1">🧭 İşlem Yönü</label>
                         <select id="tradeFormDirection" onchange="onDirectionChanged('trade')" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-indigo-500">
-                            <option value="LONG">🟢 LONG (Alış)</option>
-                            <option value="SHORT">🔴 SHORT (Satış)</option>
+                            <option value="LONG">🟢 LONG (Alış / Yükseliş)</option>
+                            <option value="SHORT">🔴 SHORT (Satış / Düşüş)</option>
                         </select>
                     </div>
                 </div>
 
+                <!-- ⚡ KALDIRAÇ & MARJİN ($) & TOPLAM POZİSYON ($) -->
+                <div class="p-3 rounded-2xl bg-indigo-950/30 border border-indigo-500/30 space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[11px] font-bold text-indigo-300">⚡ Kaldıraç & Depozito / Marjin Kullanımı</span>
+                        <span id="tradeDepositUsageBadge" class="text-[10px] font-mono text-indigo-400 font-bold"></span>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2.5">
+                        <!-- Kaldıraç -->
+                        <div>
+                            <label class="block text-gray-400 font-medium mb-1">Kaldıraç</label>
+                            <div class="flex items-center gap-1">
+                                <input id="tradeFormLeverage" type="number" min="1" max="125" value="1" oninput="onLeverageOrMarginChange()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-1.5 text-white font-mono font-bold text-center focus:outline-none focus:border-indigo-500">
+                                <span class="text-gray-400 font-bold font-mono">x</span>
+                            </div>
+                        </div>
+
+                        <!-- Marjin ($) -->
+                        <div>
+                            <label class="block text-gray-400 font-medium mb-1">Marjin ($)</label>
+                            <input id="tradeFormMargin" type="number" step="any" placeholder="100" oninput="onMarginInputChange()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-1.5 text-cyan-400 font-mono font-bold focus:outline-none focus:border-indigo-500">
+                        </div>
+
+                        <!-- Toplam Pozisyon ($) -->
+                        <div>
+                            <label class="block text-gray-400 font-medium mb-1">Toplam Pozisyon ($)</label>
+                            <input id="tradeFormSize" type="number" step="any" placeholder="100" oninput="onPositionSizeInputChange()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-1.5 text-white font-mono font-bold focus:outline-none focus:border-indigo-500">
+                        </div>
+                    </div>
+
+                    <!-- Hızlı Kaldıraç Çipleri -->
+                    <div class="flex items-center gap-1 overflow-x-auto py-0.5 text-[10px] font-mono">
+                        <span class="text-gray-500 font-sans text-[9px] shrink-0">Kaldıraç:</span>
+                        <button type="button" onclick="setTradeLeverage(1)" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 text-gray-300 transition">1x (Spot)</button>
+                        <button type="button" onclick="setTradeLeverage(2)" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 text-gray-300 transition">2x</button>
+                        <button type="button" onclick="setTradeLeverage(3)" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 text-gray-300 transition">3x</button>
+                        <button type="button" onclick="setTradeLeverage(5)" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 text-gray-300 transition">5x</button>
+                        <button type="button" onclick="setTradeLeverage(10)" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 text-gray-300 transition">10x</button>
+                        <button type="button" onclick="setTradeLeverage(20)" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 text-gray-300 transition">20x</button>
+                    </div>
+                </div>
+
+                <!-- 🎯 GİRİŞ, STOP LOSS, TAKE PROFIT -->
                 <div class="grid grid-cols-3 gap-3">
                     <div>
                         <label class="block text-gray-400 font-medium mb-1">🟡 Giriş (Entry)</label>
@@ -313,11 +429,8 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-gray-400 font-medium mb-1">💼 Pozisyon Büyüklüğü ($)</label>
-                        <input id="tradeFormSize" type="number" step="any" placeholder="1000" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-indigo-500">
-                    </div>
+                <!-- 🏁 DURUM, ÇIKIŞ VE STRATEJİ -->
+                <div class="grid grid-cols-3 gap-3">
                     <div>
                         <label class="block text-gray-400 font-medium mb-1">📊 Pozisyon Durumu</label>
                         <select id="tradeFormStatus" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-indigo-500">
@@ -327,27 +440,25 @@
                             <option value="CLOSED">⚪ Manuel Kapatıldı</option>
                         </select>
                     </div>
-                </div>
-
-                <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-gray-400 font-medium mb-1">🏁 Çıkış Fiyatı (Kapatıldıysa)</label>
+                        <label class="block text-gray-400 font-medium mb-1">🏁 Çıkış Fiyatı</label>
                         <input id="tradeFormExit" type="number" step="any" placeholder="68000" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-cyan-400 font-mono focus:outline-none focus:border-indigo-500">
                     </div>
                     <div>
-                        <label class="block text-gray-400 font-medium mb-1">📐 Strateji / Formasyon</label>
+                        <label class="block text-gray-400 font-medium mb-1">📐 Strateji</label>
                         <select id="tradeFormStrategy" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-sans focus:outline-none focus:border-indigo-500">
-                            <option value="PDH/PDL Retest">PDH / PDL Breakout Retest</option>
-                            <option value="Swing High/Low Retest">Swing High/Low Retest</option>
-                            <option value="Trendline Breakout">Trend Çizgisi Kırılımı</option>
-                            <option value="Üçgen Formasyonu">Üçgen / Flama Kırılımı</option>
-                            <option value="S/R Flip Retest">S/R Flip Destek/Direnç</option>
-                            <option value="SMC Likidite Sweep">SMC Likidite & Order Block</option>
-                            <option value="Kişisel Analiz" selected>Kişisel Trader Analizi</option>
+                            <option value="PDH/PDL Retest">PDH / PDL Retest</option>
+                            <option value="Swing High/Low Retest">Swing H/L Retest</option>
+                            <option value="Trendline Breakout">Trendline Breakout</option>
+                            <option value="Üçgen Formasyonu">Üçgen / Flama</option>
+                            <option value="S/R Flip Retest">S/R Flip</option>
+                            <option value="SMC Likidite Sweep">SMC Likidite</option>
+                            <option value="Kişisel Analiz" selected>Kişisel Analiz</option>
                         </select>
                     </div>
                 </div>
 
+                <!-- 📅 GİRİŞ VE ÇIKIŞ TARİHİ SEÇİCİLERİ (FLATPICKR TAKVİM) -->
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <div class="flex items-center justify-between mb-1">
@@ -357,12 +468,11 @@
                             <input id="tradeFormEntryDate" type="text" placeholder="Tıkla ve Takvimden Seç..." required class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-9 pr-3 py-2 text-white font-mono focus:outline-none focus:border-indigo-500 cursor-pointer">
                             <i data-lucide="calendar" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-indigo-400 pointer-events-none"></i>
                         </div>
-                        <!-- Hızlı Tarih Butonları -->
                         <div class="flex items-center gap-1 overflow-x-auto py-1 mt-1 text-[10px] font-mono">
                             <span class="text-gray-500 font-sans text-[9px] shrink-0">Hızlı:</span>
                             <button type="button" onclick="setQuickDate(0, 'tradeFormEntryDate')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">Şimdi</button>
                             <button type="button" onclick="setQuickDate(1, 'tradeFormEntryDate')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">Dün</button>
-                            <button type="button" onclick="setQuickDate(2, 'tradeFormEntryDate')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">2 Gün Önce</button>
+                            <button type="button" onclick="setQuickDate(2, 'tradeFormEntryDate')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">2 Gün</button>
                             <button type="button" onclick="setQuickDate(7, 'tradeFormEntryDate')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">1 Hafta</button>
                         </div>
                     </div>
@@ -374,7 +484,6 @@
                             <input id="tradeFormExitDate" type="text" placeholder="Kapandıysa seçiniz..." class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-9 pr-3 py-2 text-white font-mono focus:outline-none focus:border-indigo-500 cursor-pointer">
                             <i data-lucide="clock" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-cyan-400 pointer-events-none"></i>
                         </div>
-                        <!-- Hızlı Tarih Butonları -->
                         <div class="flex items-center gap-1 overflow-x-auto py-1 mt-1 text-[10px] font-mono">
                             <span class="text-gray-500 font-sans text-[9px] shrink-0">Hızlı:</span>
                             <button type="button" onclick="setQuickDate(0, 'tradeFormExitDate')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">Şimdi</button>
@@ -384,9 +493,10 @@
                     </div>
                 </div>
 
+                <!-- 📝 NOTLAR -->
                 <div>
                     <label class="block text-gray-400 font-medium mb-1">📝 Trade Notu & Analiz Açıklaması</label>
-                    <textarea id="tradeFormNotes" rows="3" placeholder="Giriş nedeni, psikoloji, risk planı..." class="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white font-sans focus:outline-none focus:border-indigo-500"></textarea>
+                    <textarea id="tradeFormNotes" rows="2" placeholder="Giriş nedeni, psikoloji, risk planı..." class="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white font-sans focus:outline-none focus:border-indigo-500"></textarea>
                 </div>
 
                 <div class="pt-3 border-t border-gray-800 flex items-center justify-end gap-2">
@@ -432,7 +542,6 @@
                             <button type="button" onclick="selectSymbol('XRP/USDT', 'note')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-amber-500 hover:text-amber-300 text-gray-300 transition">XRP</button>
                             <button type="button" onclick="selectSymbol('DOGE/USDT', 'note')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-amber-500 hover:text-amber-300 text-gray-300 transition">DOGE</button>
                             <button type="button" onclick="selectSymbol('BNB/USDT', 'note')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-amber-500 hover:text-amber-300 text-gray-300 transition">BNB</button>
-                            <button type="button" onclick="selectSymbol('SUI/USDT', 'note')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-amber-500 hover:text-amber-300 text-gray-300 transition">SUI</button>
                         </div>
                     </div>
                     <div>
@@ -503,6 +612,68 @@
         </div>
     </div>
 
+    <!-- ============================================================= -->
+    <!-- 🪟 MODAL 3: KASA & BAŞLANGIÇ DEPOZİTOSU AYARLAMA (DEPOSIT MODAL) -->
+    <!-- ============================================================= -->
+    <div id="depositModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
+            <div class="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-950/80">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="wallet" class="w-5 h-5 text-indigo-400"></i>
+                    <h3 class="text-sm font-bold text-white">Başlangıç Depozitosunu Ayarla</h3>
+                </div>
+                <button onclick="closeDepositModal()" class="w-8 h-8 rounded-xl bg-gray-800 text-gray-400 hover:text-white flex items-center justify-center">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <form onsubmit="handleDepositFormSubmit(event)" class="p-5 space-y-4 text-xs font-sans">
+                <div>
+                    <label class="block text-gray-400 font-medium mb-1">💰 Başlangıç Sermayesi / Kasa ($)</label>
+                    <input id="depositInput" type="number" step="any" min="1" placeholder="1000" required class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-emerald-400 font-mono font-bold text-base focus:outline-none focus:border-indigo-500">
+                    <p class="text-[10px] text-gray-500 mt-1">Kasa büyümesi ve marjin oranları bu depozito miktarına göre hesaplanır.</p>
+                </div>
+
+                <div class="flex items-center gap-1.5 overflow-x-auto text-[10px] font-mono">
+                    <span class="text-gray-500 shrink-0">Hızlı:</span>
+                    <button type="button" onclick="setDepositValue(500)" class="px-2.5 py-1 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 text-gray-300">$500</button>
+                    <button type="button" onclick="setDepositValue(1000)" class="px-2.5 py-1 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 text-gray-300">$1,000</button>
+                    <button type="button" onclick="setDepositValue(5000)" class="px-2.5 py-1 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 text-gray-300">$5,000</button>
+                    <button type="button" onclick="setDepositValue(10000)" class="px-2.5 py-1 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 text-gray-300">$10,000</button>
+                </div>
+
+                <div class="pt-3 border-t border-gray-800 flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeDepositModal()" class="px-4 py-2 rounded-xl bg-gray-800 text-gray-300 font-bold hover:bg-gray-700 transition">İptal</button>
+                    <button type="submit" class="px-5 py-2 rounded-xl bg-indigo-600 text-white font-bold transition shadow-lg shadow-indigo-600/20">Kaydet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ============================================================= -->
+    <!-- 🪟 MODAL 4: TAKVİM GÜNÜ DETAY ÇEKMECESİ (DAY DETAILS MODAL) -->
+    <!-- ============================================================= -->
+    <div id="dayDetailsModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+            <div class="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-950/80">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="calendar" class="w-5 h-5 text-amber-400"></i>
+                    <div>
+                        <h3 id="dayModalDateTitle" class="text-sm font-bold text-white font-mono">2026-08-25 Günlük Raporu</h3>
+                        <span id="dayModalPnlSummary" class="text-[11px] font-mono text-emerald-400 font-bold"></span>
+                    </div>
+                </div>
+                <button onclick="closeDayDetailsModal()" class="w-8 h-8 rounded-xl bg-gray-800 text-gray-400 hover:text-white flex items-center justify-center">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <div id="dayModalTradeList" class="p-4 overflow-y-auto space-y-3 font-mono text-xs">
+                <!-- JS ile günün işlemleri dolacak -->
+            </div>
+        </div>
+    </div>
+
     <!-- 📱 MOBİL ALT MENÜ BARI (BOTTOM NAVIGATION BAR) -->
     <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-gray-950/95 backdrop-blur-xl border-t border-gray-800/90 px-3 py-2 flex items-center justify-around shadow-2xl safe-area-bottom">
         <a href="/index.html" class="flex flex-col items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-white transition">
@@ -526,12 +697,14 @@
             <span>Telegram</span>
         </button>
     </nav>
+    <div class="h-16 md:hidden"></div>
+
     <!-- 📜 DİNAMİK BİNANCE COİN LİSTESİ (AUTOCOMPLETE DATALIST) -->
     <datalist id="availablePairsList"></datalist>
 
     <!-- JavaScript Dosyaları -->
     <script src="/static/js/chart.js?v=3.2"></script>
     <script src="/static/js/telegram.js?v=3.2"></script>
-    <script src="/static/js/journal.js?v=1.1"></script>
+    <script src="/static/js/journal.js?v=2.0"></script>
 </body>
 </html>

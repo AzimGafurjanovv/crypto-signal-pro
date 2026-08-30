@@ -802,16 +802,21 @@ def sanitize_json(data: Any) -> Any:
 class TradeJournalItemRequest(BaseModel):
     symbol: str
     direction: str = "LONG"
+    leverage: Optional[int] = 1
+    margin: Optional[float] = 0.0
+    position_size: Optional[float] = 0.0
     entry_price: float
     target_price: Optional[float] = 0.0
     stop_loss: Optional[float] = 0.0
     exit_price: Optional[float] = None
     status: Optional[str] = "OPEN"
-    position_size: Optional[float] = 0.0
     strategy: Optional[str] = "Kişisel Analiz"
     notes: Optional[str] = ""
     entry_date_str: Optional[str] = None
     exit_date_str: Optional[str] = None
+
+class JournalDepositRequest(BaseModel):
+    deposit: float
 
 class TradeNoteItemRequest(BaseModel):
     symbol: str
@@ -839,6 +844,11 @@ async def get_journal_trades(status: Optional[str] = Query("ALL"), symbol: Optio
 async def get_journal_stats():
     stats = trade_journal_manager.get_stats()
     return sanitize_json({"status": "success", "stats": stats})
+
+@app.post("/api/journal/deposit")
+async def set_journal_deposit(req: JournalDepositRequest):
+    updated = trade_journal_manager.update_initial_deposit(req.deposit)
+    return sanitize_json({"status": "success", "settings": updated, "message": "Kasa / Başlangıç depozitosu güncellendi."})
 
 @app.post("/api/journal")
 async def add_journal_trade(req: TradeJournalItemRequest):

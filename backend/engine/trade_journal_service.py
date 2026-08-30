@@ -28,7 +28,30 @@ import numpy as np
 from engine.market_data import market_manager
 
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+def get_journal_data_dir() -> str:
+    # 1. Environment variable
+    env_dir = os.environ.get("CRYPTO_DATA_DIR")
+    if env_dir and os.path.exists(env_dir):
+        return env_dir
+    
+    # 2. Production server persistent storage
+    prod_dir = "/root/crypto_data"
+    if os.path.exists(prod_dir):
+        return prod_dir
+    if os.name != "nt" and os.path.exists("/root"):
+        try:
+            os.makedirs(prod_dir, exist_ok=True)
+            return prod_dir
+        except Exception:
+            pass
+
+    # 3. Local directory
+    local_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+    os.makedirs(local_dir, exist_ok=True)
+    return local_dir
+
+
+DATA_DIR = get_journal_data_dir()
 JOURNAL_FILE = os.path.join(DATA_DIR, "trade_journal.json")
 NOTES_FILE = os.path.join(DATA_DIR, "trade_notes.json")
 SETTINGS_FILE = os.path.join(DATA_DIR, "journal_settings.json")

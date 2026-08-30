@@ -8,7 +8,25 @@ import json
 import requests
 from typing import Dict, Any, Optional
 
-CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+def get_telegram_data_dir() -> str:
+    env_dir = os.environ.get("CRYPTO_DATA_DIR")
+    if env_dir and os.path.exists(env_dir):
+        return env_dir
+    prod_dir = "/root/crypto_data"
+    if os.path.exists(prod_dir):
+        return prod_dir
+    if os.name != "nt" and os.path.exists("/root"):
+        try:
+            os.makedirs(prod_dir, exist_ok=True)
+            return prod_dir
+        except Exception:
+            pass
+    local_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+    os.makedirs(local_dir, exist_ok=True)
+    return local_dir
+
+
+CONFIG_DIR = get_telegram_data_dir()
 CONFIG_FILE = os.path.join(CONFIG_DIR, "telegram_config.json")
 
 def load_telegram_config() -> Dict[str, Any]:

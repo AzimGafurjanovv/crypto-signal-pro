@@ -311,16 +311,22 @@ function renderChartData(chartData) {
                 // Eğer formasyona ait özel trendline koordinatları varsa doğrudan grafik üzerine çiz
                 if (pat.lines && Array.isArray(pat.lines)) {
                     pat.lines.forEach(lineDef => {
-                        const patLineSeries = chartInstance.addLineSeries({
-                            color: lineDef.color || '#fbbf24',
-                            lineWidth: 2,
-                            lineStyle: 2,
-                            priceLineVisible: false,
-                            lastValueVisible: false,
-                            crosshairMarkerVisible: false,
-                        });
-                        patLineSeries.setData(lineDef.points);
-                        patternLineSeriesList.push(patLineSeries);
+                        if (lineDef.points && lineDef.points.length > 0) {
+                            const patLineSeries = chartInstance.addLineSeries({
+                                color: lineDef.color || '#fbbf24',
+                                lineWidth: lineDef.lineWidth || 2,
+                                lineStyle: lineDef.lineStyle !== undefined ? lineDef.lineStyle : 0,
+                                priceLineVisible: false,
+                                lastValueVisible: false,
+                                crosshairMarkerVisible: false,
+                            });
+                            const sortedPoints = lineDef.points.map(p => ({
+                                time: p.time,
+                                value: p.value
+                            })).sort((a, b) => a.time - b.time);
+                            patLineSeries.setData(sortedPoints);
+                            patternLineSeriesList.push(patLineSeries);
+                        }
                     });
                 }
 

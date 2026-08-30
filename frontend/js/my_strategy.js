@@ -672,14 +672,18 @@ async function loadAndRenderRadarChart(coin) {
                 candleSeries.setMarkers(markers);
             }
 
-            // 6. ÖZEL FORMASYON TRENDLİNE & BOYUN ÇİZGİLERİ (Trendlines Çizimi)
-            if (coin.lines && Array.isArray(coin.lines)) {
-                coin.lines.forEach(lineDef => {
+            // 6. ÖZEL FORMASYON TRENDLİNE & BOYUN ÇİZGİLERİ (TradingView Alt+T Standardı)
+            const patternLines = (coin.lines && Array.isArray(coin.lines) && coin.lines.length > 0)
+                ? coin.lines
+                : ((data.patterns && data.patterns[0] && data.patterns[0].lines) ? data.patterns[0].lines : []);
+
+            if (patternLines && Array.isArray(patternLines)) {
+                patternLines.forEach(lineDef => {
                     if (lineDef.points && lineDef.points.length > 0) {
                         const patLine = radarChartInstance.addLineSeries({
                             color: lineDef.color || '#fbbf24',
-                            lineWidth: 2,
-                            lineStyle: 0,
+                            lineWidth: lineDef.lineWidth || 2,
+                            lineStyle: lineDef.lineStyle !== undefined ? lineDef.lineStyle : 0,
                             priceLineVisible: false,
                             lastValueVisible: false,
                             crosshairMarkerVisible: false,

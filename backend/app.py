@@ -535,12 +535,15 @@ async def get_chart_data(symbol: str, timeframe: str = Query("1h")):
     mtf_summary = analyze_all_timeframes(clean_sym)
     setup['mtf'] = mtf_summary
 
+    detected_patterns = detect_chart_patterns(df_enriched)
+
     return sanitize_json({
         "status": "success",
         "symbol": clean_sym,
         "timeframe": timeframe,
         "candles": candles,
         "setup": setup,
+        "patterns": detected_patterns,
         "mtf": mtf_summary
     })
 

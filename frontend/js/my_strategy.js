@@ -634,42 +634,72 @@ async function loadAndRenderRadarChart(coin) {
             }
 
             // 📍 5. GRAFİK ÜZERİNDE MUM ETİKETLERİ VE OKLAR (MARKERS)
-            const markers = [];
-            const boTime = coin.breakout_bar ? (coin.breakout_bar.timestamp || coin.breakout_bar.time) : null;
-            const rtTime = coin.retest_bar ? (coin.retest_bar.timestamp || coin.retest_bar.time) : null;
-            const confTime = coin.confirmed_bar ? (coin.confirmed_bar.timestamp || coin.confirmed_bar.time) : null;
+            const candleTimes = formattedCandles.map(c => c.time);
+            const candleTimeSet = new Set(candleTimes);
 
-            if (boTime) {
-                markers.push({
-                    time: boTime,
-                    position: coin.direction === 'LONG' ? 'belowBar' : 'aboveBar',
-                    color: '#06b6d4',
-                    shape: coin.direction === 'LONG' ? 'arrowUp' : 'arrowDown',
-                    text: '⚡ KIRILIM'
-                });
+            function findClosestTs(ts) {
+                if (!ts || candleTimes.length === 0) return null;
+                let closest = candleTimes[0];
+                let minDiff = Math.abs(candleTimes[0] - ts);
+                for (let i = 1; i < candleTimes.length; i++) {
+                    const diff = Math.abs(candleTimes[i] - ts);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closest = candleTimes[i];
+                    }
+                }
+                return closest;
             }
-            if (rtTime) {
-                markers.push({
-                    time: rtTime,
-                    position: coin.direction === 'LONG' ? 'belowBar' : 'aboveBar',
-                    color: '#f59e0b',
-                    shape: 'circle',
-                    text: '🎯 RETEST'
-                });
+
+            const markers = [];
+            const boTs = coin.breakout_bar ? (coin.breakout_bar.timestamp || coin.breakout_bar.time) : null;
+            const rtTs = coin.retest_bar ? (coin.retest_bar.timestamp || coin.retest_bar.time) : null;
+            const confTs = coin.confirmed_bar ? (coin.confirmed_bar.timestamp || coin.confirmed_bar.time) : null;
+
+            if (boTs) {
+                const matchedTime = candleTimeSet.has(boTs) ? boTs : findClosestTs(boTs);
+                if (matchedTime) {
+                    markers.push({
+                        time: matchedTime,
+                        position: coin.direction === 'LONG' ? 'belowBar' : 'aboveBar',
+                        color: '#06b6d4',
+                        shape: coin.direction === 'LONG' ? 'arrowUp' : 'arrowDown',
+                        text: '⚡ KIRILIM'
+                    });
+                }
             }
-            if (confTime) {
-                markers.push({
-                    time: confTime,
-                    position: coin.direction === 'LONG' ? 'belowBar' : 'aboveBar',
-                    color: '#10b981',
-                    shape: coin.direction === 'LONG' ? 'arrowUp' : 'arrowDown',
-                    text: '🔥 ONAY (GİRİŞ)'
-                });
+            if (rtTs) {
+                const matchedTime = candleTimeSet.has(rtTs) ? rtTs : findClosestTs(rtTs);
+                if (matchedTime) {
+                    markers.push({
+                        time: matchedTime,
+                        position: coin.direction === 'LONG' ? 'belowBar' : 'aboveBar',
+                        color: '#f59e0b',
+                        shape: 'circle',
+                        text: '🎯 RETEST'
+                    });
+                }
+            }
+            if (confTs) {
+                const matchedTime = candleTimeSet.has(confTs) ? confTs : findClosestTs(confTs);
+                if (matchedTime) {
+                    markers.push({
+                        time: matchedTime,
+                        position: coin.direction === 'LONG' ? 'belowBar' : 'aboveBar',
+                        color: '#10b981',
+                        shape: coin.direction === 'LONG' ? 'arrowUp' : 'arrowDown',
+                        text: '🔥 ONAY (GİRİŞ)'
+                    });
+                }
             }
 
             if (markers.length > 0) {
-                markers.sort((a, b) => a.time - b.time);
-                candleSeries.setMarkers(markers);
+                try {
+                    markers.sort((a, b) => a.time - b.time);
+                    candleSeries.setMarkers(markers);
+                } catch (mErr) {
+                    console.warn('Marker render warning:', mErr);
+                }
             }
 
             // 6. ÖZEL FORMASYON TRENDLİNE & BOYUN ÇİZGİLERİ (TradingView Alt+T Standardı)
@@ -680,19 +710,39 @@ async function loadAndRenderRadarChart(coin) {
             if (patternLines && Array.isArray(patternLines)) {
                 patternLines.forEach(lineDef => {
                     if (lineDef.points && lineDef.points.length > 0) {
-                        const patLine = radarChartInstance.addLineSeries({
-                            color: lineDef.color || '#fbbf24',
-                            lineWidth: lineDef.lineWidth || 2,
-                            lineStyle: lineDef.lineStyle !== undefined ? lineDef.lineStyle : 0,
-                            priceLineVisible: false,
-                            lastValueVisible: false,
-                            crosshairMarkerVisible: false,
-                        });
-                        const validPoints = lineDef.points.map(p => ({
-                            time: p.time,
-                            value: p.value
-                        })).sort((a, b) => a.time - b.time);
-                        patLine.setData(validPoints);
+                        try {
+                            const patLine = radarChartInstance.addLineSeries({
+                                color: lineDef.color || '#fbbf24',
+                                lineWidth: lineDef.lineWidth || 2,
+                                lineStyle: lineDef.lineStyle !== undefined ? lineDef.lineStyle : 0,
+                                priceLineVisible: false,
+                                lastValueVisible: true,
+                                crosshairMarkerVisible: true,
+                                title: lineDef.name || 'Trendline'
+                            });
+
+                            const validPoints = [];
+                            const seenTimes = new Set();
+
+                            lineDef.points.forEach(p => {
+                                const ptTime = candleTimeSet.has(p.time) ? p.time : findClosestTs(p.time);
+                                if (ptTime && !seenTimes.has(ptTime)) {
+                                    seenTimes.add(ptTime);
+                                    validPoints.push({
+                                        time: ptTime,
+                                        value: Number(p.value)
+                                    });
+                                }
+                            });
+
+                            validPoints.sort((a, b) => a.time - b.time);
+
+                            if (validPoints.length >= 2) {
+                                patLine.setData(validPoints);
+                            }
+                        } catch (lineErr) {
+                            console.error('Line series render error:', lineErr);
+                        }
                     }
                 });
             }

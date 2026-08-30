@@ -306,26 +306,62 @@ function renderChartData(chartData) {
         activePriceLines.push(tp3Line);
 
         // 11. ÜÇGEN VE FORMASYON ÇİZGİLERİ (Trendlines Çizimi)
+        const candleTimes = candles.map(c => c.time);
+        const candleTimeSet = new Set(candleTimes);
+
+        function findClosestChartTs(ts) {
+            if (!ts || candleTimes.length === 0) return null;
+            let closest = candleTimes[0];
+            let minDiff = Math.abs(candleTimes[0] - ts);
+            for (let i = 1; i < candleTimes.length; i++) {
+                const diff = Math.abs(candleTimes[i] - ts);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    closest = candleTimes[i];
+                }
+            }
+            return closest;
+        }
+
         if (chartData.patterns && chartData.patterns.length > 0) {
             chartData.patterns.forEach(pat => {
-                // Eğer formasyona ait özel trendline koordinatları varsa doğrudan grafik üzerine çiz
                 if (pat.lines && Array.isArray(pat.lines)) {
                     pat.lines.forEach(lineDef => {
                         if (lineDef.points && lineDef.points.length > 0) {
-                            const patLineSeries = chartInstance.addLineSeries({
-                                color: lineDef.color || '#fbbf24',
-                                lineWidth: lineDef.lineWidth || 2,
-                                lineStyle: lineDef.lineStyle !== undefined ? lineDef.lineStyle : 0,
-                                priceLineVisible: false,
-                                lastValueVisible: false,
-                                crosshairMarkerVisible: false,
-                            });
-                            const sortedPoints = lineDef.points.map(p => ({
-                                time: p.time,
-                                value: p.value
-                            })).sort((a, b) => a.time - b.time);
-                            patLineSeries.setData(sortedPoints);
-                            patternLineSeriesList.push(patLineSeries);
+                            try {
+                                const patLineSeries = chartInstance.addLineSeries({
+                                    color: lineDef.color || '#fbbf24',
+                                    lineWidth: lineDef.lineWidth || 2,
+                                    lineStyle: lineDef.lineStyle !== undefined ? lineDef.lineStyle : 0,
+                                    priceLineVisible: false,
+                                    lastValueVisible: true,
+                                    crosshairMarkerVisible: true,
+                                    title: lineDef.name || 'Trendline'
+                                });
+
+                                const validPoints = [];
+                                const seenTimes = new Set();
+
+                                lineDef.points.forEach(p => {
+                                    const ptTime = candleTimeSet.has(p.time) ? p.time : findClosestChartTs(p.time);
+                                    if (ptTime && !seenTimes.has(ptTime)) {
+                                        seenTimes.add(ptTime);
+                                        validPoints.push({
+                                            time: ptTime,
+                                            value: Number(p.value)
+                                        });
+                                    }
+                                });
+
+                                validPoints.sort((a, b) => a.time - b.time);
+
+                                if (validPoints.length >= 2) {
+                                    patLineSeries.setData(validPoints);
+                                    patternLineSeriesList.push(patLineSeries);
+                                }
+                            } catch (lineErr) {
+                                console.error('Pattern line render error in main chart:', lineErr);
+                            }
                         }
                     });
                 }

@@ -433,14 +433,19 @@ async function openRadarChartModal(coin) {
             : 'px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-400 font-bold border border-rose-500/40 text-xs font-mono';
     }
 
-    if (document.getElementById('modalSymbolTitle')) document.getElementById('modalSymbolTitle').textContent = coin.symbol;
+    const coinTf = (coin.timeframe || '1h').toUpperCase();
+    if (document.getElementById('modalSymbolTitle')) document.getElementById('modalSymbolTitle').textContent = `${coin.symbol} (${coinTf})`;
     if (document.getElementById('modalStageSubtitle')) {
-        document.getElementById('modalStageSubtitle').textContent = `${coin.strategy_name || ''} • ${coin.stage_name} (${currentRadarTimeframe})`;
+        document.getElementById('modalStageSubtitle').innerHTML = `
+            <span class="text-amber-400 font-bold">${coin.strategy_name || 'Formasyon'}</span> • 
+            <span class="text-white">${coin.stage_name}</span> • 
+            <span class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/40">Zaman Dilimi: ${coinTf}</span>
+        `;
     }
 
     const modalBacktestBtn = document.getElementById('modalBacktestBtn');
     if (modalBacktestBtn) {
-        modalBacktestBtn.href = `/backtest.html?symbol=${encodeURIComponent(coin.symbol)}&timeframe=${encodeURIComponent(currentRadarTimeframe)}`;
+        modalBacktestBtn.href = `/backtest.html?symbol=${encodeURIComponent(coin.symbol)}&timeframe=${encodeURIComponent(coin.timeframe || '1h')}`;
     }
     if (document.getElementById('badgePdh')) document.getElementById('badgePdh').textContent = `$${formatPrice(coin.pdh || coin.swing_level || levelPrice)}`;
     if (document.getElementById('badgePdl')) document.getElementById('badgePdl').textContent = `$${formatPrice(coin.pdl || coin.swing_level || levelPrice)}`;
@@ -486,12 +491,22 @@ async function openRadarChartModal(coin) {
     // Açıklama Metni
     const explEl = document.getElementById('modalRadarExplanationText');
     if (explEl) {
+        const boStr = coin.breakout_bar ? `Saat ${coin.breakout_bar.time_str} barında $${formatPrice(coin.breakout_bar.close)} ile kırıldı` : 'Kırılım bekleniyor';
+        const rtStr = coin.retest_bar ? `Saat ${coin.retest_bar.time_str} barında seviyeye fitil değdirildi` : 'Retest henüz gerçekleşmedi';
+        const cfStr = coin.confirmed_bar ? `Saat ${coin.confirmed_bar.time_str} barında hacimli yönlü mum ile onaylandı` : 'Onay mumu bekleniyor';
+
         explEl.innerHTML = `
-            ${coin.explanation}<br/><br/>
-            <span class="text-cyan-400 font-bold">• Seviye Çizgisi (${levelName}):</span> $${formatPrice(levelPrice)}<br/>
-            <span class="text-yellow-400 font-bold">• Giriş Seviyesi:</span> $${formatPrice(coin.entry_price || coin.current_price)}<br/>
-            <span class="text-rose-400 font-bold">• Stop Loss (0.2xATR):</span> $${formatPrice(coin.stop_loss)}<br/>
-            <span class="text-emerald-400 font-bold">• Dinamik Hedef (S/R):</span> ${tpPrice ? '$' + formatPrice(tpPrice) : 'S/R Takip Ediliyor'}
+            <div class="space-y-1.5 font-mono text-xs">
+                <div class="text-amber-300 font-bold font-sans">${coin.explanation || ''}</div>
+                <div class="p-2.5 rounded-lg bg-gray-950/80 border border-gray-800 space-y-1">
+                    <div><span class="text-cyan-400 font-bold">1. Kırılım Mumu:</span> ${boStr}</div>
+                    <div><span class="text-amber-400 font-bold">2. Retest Mumu:</span> ${rtStr}</div>
+                    <div><span class="text-emerald-400 font-bold">3. Onay Mumu:</span> ${cfStr}</div>
+                </div>
+                <div class="text-[11px] text-gray-400 font-sans">
+                    💡 <strong>Not:</strong> Bu analiz <strong>${coinTf} (${coin.timeframe_label || coinTf})</strong> zaman dilimi mumlarıyla yapılmıştır. TradingView üzerinde incelerken grafiğinizi <strong>${coinTf}</strong> zaman dilimine ayarlayınız.
+                </div>
+            </div>
         `;
     }
 

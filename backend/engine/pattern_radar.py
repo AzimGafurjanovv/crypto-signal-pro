@@ -1,13 +1,12 @@
 """
-CryptoSignalPro AI - Gelismis Formasyon Radari & Kronolojik Retest Motoru (v9.5.0)
+CryptoSignalPro AI - Gelismis Formasyon Radari & Taze Retest Motoru (v10.0.0)
 
-Katı Kurallar:
-1. Breakout (Kirilim): Mum seviyenin otesinde KAPANMALIDIR.
-2. Retest: Kirilim mumundan KESINLIKLE SONRA (idx > bo_idx) gelmeli,
-   seviyeyi test etmeli (0.35xATR tolerans) ve seviyenin otesinde KAPANARAK tutunmalidir.
-   Aksi halde Sahte Kirilim (Invalidated) sayilir.
-3. Onay (Confirmation): Retest mumunda veya sonraki 2 mum icinde hacimli yonlu mum olmali.
-   Tazelik Kurali: Onay mumu son 2 mum icinde gerceklesmis olmalidir.
+Kati Profesyonel Trader Kurallari:
+1. Taze Kirilim: Kirilim mumu SON 10 MUM icinde olmalidir (eski kirilimlar bayattir).
+2. Taze Retest: Retest, kirilimdan sonraki EN FAZLA 6 MUM icinde gerceklesmelidir (1 <= rt_idx - bo_idx <= 6).
+   Aksi halde seviye bayatlar ve retest sayilmaz.
+3. Taze Onay: Onay mumu, retest mumundan sonraki EN FAZLA 2 MUM icinde (conf_idx - rt_idx <= 2)
+   ve su anki bar veya bir onceki barda (SON 2 MUM icinde) taze gerceklesmis olmalidir.
 """
 
 import math
@@ -32,7 +31,6 @@ def evaluate_pattern_strategy_exact(symbol: str, df: pd.DataFrame, timeframe: st
     if not patterns:
         return None
 
-    # En yuksek kaliteli formasyonu sec
     pat = patterns[0]
     n = len(df_calc)
     current_price = float(df_calc['close'].iloc[-1])
@@ -44,10 +42,10 @@ def evaluate_pattern_strategy_exact(symbol: str, df: pd.DataFrame, timeframe: st
     direction = 'LONG' if pat_type == 'BULLISH' else 'SHORT'
     breakout_level = float(pat.get('breakout_level') or pat.get('flip_level') or pat.get('neckline') or pat.get('range_high') or pat.get('range_low') or current_price)
     target = float(pat.get('target', current_price * (1.04 if direction == 'LONG' else 0.96)))
-    tolerance = round(0.35 * current_atr, 4)
+    tolerance = round(0.30 * current_atr, 4)
     quality_score = int(pat.get('quality_score', 85))
 
-    # Mum verilerini olustur (kronolojik index siralamasi ile)
+    # Mum verilerini olustur
     bars = []
     for idx, row in df_calc.iterrows():
         ts = int(row['timestamp']) if 'timestamp' in row else 0
@@ -65,37 +63,34 @@ def evaluate_pattern_strategy_exact(symbol: str, df: pd.DataFrame, timeframe: st
         })
 
     # ─────────────────────────────────────────────────────────────────────────
-    # 1. KIRILIM MUMU TESPITI (Son 20 Bar Icinde Ilk Gecerli Kirilim)
+    # 1. TAZE KIRILIM MUMU (SADECE Son 10 Bar Icinde Kapanmis Kirilimlar)
     # ─────────────────────────────────────────────────────────────────────────
-    search_window = bars[-25:]
+    search_window = bars[-12:]
     breakout_bar = None
     bo_local_idx = None
 
     for i, b in enumerate(search_window):
         if direction == 'LONG':
-            # Long Kirilimi: Mum kapanisi seviyenin ustunde
             if b['close'] > breakout_level:
                 breakout_bar = b
                 bo_local_idx = i
                 break
         else:
-            # Short Kirilimi: Mum kapanisi seviyenin altinda
             if b['close'] < breakout_level:
                 breakout_bar = b
                 bo_local_idx = i
                 break
 
     if not breakout_bar:
-        # Henuz kirilim gerceklesmemis, formasyon olusum asamasinda
         stage = "BREAKOUT"
-        stage_name = "1. Aşama: Kırılım Bekleniyor (Formasyon Sıkışması)"
+        stage_name = "1. Aşama: Formasyon Sıkışması (Kırılım Bekleniyor)"
         retest_bar = None
         confirmed_bar = None
     else:
         # ─────────────────────────────────────────────────────────────────────
-        # 2. RETEST MUMU TESPITI (KESINLIKLE Kirilim Mumundan Sonra: i > bo_local_idx)
+        # 2. RETEST MUMU (Kirilimdan sonraki EN FAZLA 6 bar icinde: 1 <= gap <= 6)
         # ─────────────────────────────────────────────────────────────────────
-        post_bo_bars = search_window[bo_local_idx + 1:]
+        post_bo_bars = search_window[bo_local_idx + 1 : min(len(search_window), bo_local_idx + 7)]
         retest_bar = None
         rt_local_idx = None
         is_invalidated = False
@@ -104,42 +99,39 @@ def evaluate_pattern_strategy_exact(symbol: str, df: pd.DataFrame, timeframe: st
             actual_j = bo_local_idx + 1 + j
 
             if direction == 'LONG':
-                # Gecersizlik: Seviyenin cok altina sarkip kapandiysa sahte kirilim
+                # Gecersizlik: Seviyenin cok altinda kapanis -> Sahte Kirilim
                 if b['close'] < (breakout_level - tolerance):
                     is_invalidated = True
                     break
 
-                # Retest: Dusuk fitil seviyeye yaklasmis/dokunmus VE kapanis seviyenin ustunde kalmis
+                # Retest: Dusuk fitil seviyeye yaklasmis/dokunmus VE kapanis seviyeyi korumus
                 if b['low'] <= (breakout_level + tolerance) and b['close'] >= (breakout_level - tolerance * 0.7):
                     retest_bar = b
                     rt_local_idx = actual_j
                     break
             else:
-                # Short Gecersizlik
                 if b['close'] > (breakout_level + tolerance):
                     is_invalidated = True
                     break
 
-                # Short Retest: Yuksek fitil seviyeye ulasmis VE kapanis seviyenin altinda kalmis
                 if b['high'] >= (breakout_level - tolerance) and b['close'] <= (breakout_level + tolerance * 0.7):
                     retest_bar = b
                     rt_local_idx = actual_j
                     break
 
         if is_invalidated:
-            # Sahte kirilim olmus, retest iptal
             retest_bar = None
             confirmed_bar = None
             stage = "BREAKOUT"
             stage_name = "1. Aşama: Sahte Kırılım Sonrası Yeniden Kırılım Bekleniyor"
         elif not retest_bar:
-            # Kirilim olmus ama henuz retest mumu gelmemis
+            # Kirilim taze (son 10 bar) ama henuz retest gelmemis
             stage = "BREAKOUT"
-            stage_name = "1. Aşama: Formasyon Kırılımı (Retest Bekleniyor)"
+            stage_name = "1. Aşama: Taze Kırılım (Retest İçin Geri Çekilme Bekleniyor)"
             confirmed_bar = None
         else:
             # ─────────────────────────────────────────────────────────────────
-            # 3. ONAY MUMU TESPITI (Retest Mumunda veya Sonraki 2 Mum Icinde)
+            # 3. ONAY MUMU (Retest Mumunda veya Sonraki En Fazla 2 Mum Icinde)
             # ─────────────────────────────────────────────────────────────────
             conf_window = search_window[rt_local_idx : min(len(search_window), rt_local_idx + 3)]
             confirmed_bar = None
@@ -168,27 +160,26 @@ def evaluate_pattern_strategy_exact(symbol: str, df: pd.DataFrame, timeframe: st
                         confirmed_bar = c_bar
                         break
 
-            # Tazelik Kontrolu: Onay mumu son 3 bar icinde mi?
             last_bar_idx = len(search_window) - 1
             if confirmed_bar:
                 conf_pos = search_window.index(confirmed_bar)
-                if last_bar_idx - conf_pos <= 3:
+                # Taze onay mumu: Son 2 bar icinde kapanmis olmali
+                if last_bar_idx - conf_pos <= 2:
                     stage = "CONFIRMED"
-                    stage_name = "3. Aşama: Formasyon Onaylandı (Kesin Giriş)"
+                    stage_name = "3. Aşama: Taze Onay Mumu Kapandı (Giriş Hazır)"
                 else:
-                    # Onay mumu cok eski kalmis (islem ilerlemis)
                     stage = "CONFIRMED"
-                    stage_name = "3. Aşama: Formasyon Onaylandı (Hedefe İlerliyor)"
-            elif last_bar_idx - rt_local_idx <= 4:
-                # Retest henuz taze ve onay bekliyor
+                    stage_name = "3. Aşama: Onaylandı (İşlem İlerliyor)"
+            elif last_bar_idx - rt_local_idx <= 2:
+                # Retest son 2 bar icinde gerceklesmis ve onay bekliyor
                 stage = "RETESTING"
-                stage_name = "2. Aşama: Formasyon Retesti (Onay Mumu Bekleniyor)"
+                stage_name = "2. Aşama: Retest Bölgesinde (Onay Mumu Bekleniyor)"
             else:
-                # Retest uzerinden cok bar gecmis ama onay gelmemis -> Bayat
+                # Retest uzerinden 3+ bar gecmis ama onay gelmemis -> Bayat/Gecersiz
                 stage = "BREAKOUT"
                 stage_name = "1. Aşama: Kırılım Bölgesinde Konsolidasyon"
+                retest_bar = None
 
-    # Risk & Getiri Seviyeleri
     if direction == "LONG":
         stop_loss = round(breakout_level - (0.25 * current_atr), 4)
         risk = max(0.0001, current_price - stop_loss)
@@ -200,23 +191,25 @@ def evaluate_pattern_strategy_exact(symbol: str, df: pd.DataFrame, timeframe: st
 
     rr_ratio = round(reward / risk, 1)
 
-    # 4 Adimli Kontrol Listesi
+    tf_labels = {'15m': '15 Dakikalık (15m)', '1h': '1 Saatlik (1h)', '4h': '4 Saatlik (4h)'}
+    tf_str = tf_labels.get(timeframe, timeframe)
+
     checklist = [
         {
             "step": 1,
-            "title": f"1. {pat_name} Kırılımı (Kalite: %{quality_score})",
+            "title": f"1. {pat_name} Kırılımı [{tf_str}] (Kalite: %{quality_score})",
             "passed": bool(breakout_bar),
             "detail": f"{pat_name} tespit edildi. Kırılan Seviye: ${breakout_level:,.4f}" if breakout_bar else f"Henüz ${breakout_level:,.4f} kırılımı gerçekleşmedi."
         },
         {
             "step": 2,
-            "title": f"2. Retest (0.35xATR Tolerans = ${tolerance:,.4f})",
+            "title": f"2. Retest [{tf_str}] (0.30xATR Tolerans = ${tolerance:,.4f})",
             "passed": bool(retest_bar),
-            "detail": f"Fiyat saat {retest_bar['time_str']} barında ${breakout_level:,.4f} seviyesine fitil retesti verdi." if retest_bar else f"Fiyatın ${breakout_level:,.4f} seviyesine geri çekilmesi bekleniyor."
+            "detail": f"Fiyat saat {retest_bar['time_str']} barında (${retest_bar['low' if direction == 'LONG' else 'high']:,.4f}) ${breakout_level:,.4f} seviyesine fitil retesti verdi." if retest_bar else f"Fiyatın ${breakout_level:,.4f} seviyesine geri çekilmesi bekleniyor."
         },
         {
             "step": 3,
-            "title": "3. Hacimli Onay Mumu (Yönlü Mum & Vol > %80 SMA20)",
+            "title": f"3. Hacimli Onay Mumu [{tf_str}] (Gövde >= %45 & Vol > %80 SMA20)",
             "passed": bool(confirmed_bar),
             "detail": f"Saat {confirmed_bar['time_str']} barında güçlü onay mumu kapandı." if confirmed_bar else "Hacimli onay mumu bekleniyor."
         },
@@ -247,6 +240,7 @@ def evaluate_pattern_strategy_exact(symbol: str, df: pd.DataFrame, timeframe: st
         "symbol": symbol,
         "timeframe": timeframe,
         "optimal_timeframe": timeframe,
+        "timeframe_label": tf_str,
         "quality_score": quality_score,
         "strategy_name": pat_name,
         "pattern_category": pat_cat,
@@ -280,7 +274,7 @@ def evaluate_coin_multi_timeframe_optimal(symbol: str, target_timeframe: str = "
             return None
         return None
 
-    candidate_tfs = ["4h", "1h", "15m"]
+    candidate_tfs = ["1h", "15m", "4h"]
     evaluated_candidates = []
 
     for tf in candidate_tfs:
@@ -304,7 +298,7 @@ def evaluate_coin_multi_timeframe_optimal(symbol: str, target_timeframe: str = "
 
     best_match = evaluated_candidates[0]
     best_match["is_auto_optimal"] = True
-    best_match["timeframe_badge"] = f"🌟 {best_match['timeframe'].upper()} (En İdeal)"
+    best_match["timeframe_badge"] = f"🌟 {best_match['timeframe'].upper()}"
     return best_match
 
 

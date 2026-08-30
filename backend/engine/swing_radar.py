@@ -221,28 +221,42 @@ def _evaluate_single_swing_direction(
     bo_atr = atrs[breakout_idx] if atrs[breakout_idx] > 0 else current_atr
     tolerance = 0.35 * bo_atr
 
-    # Step 3: Taze Retest (Kırılımdan sonraki EN FAZLA 8 bar içinde)
+    # Step 3: Taze Retest & Sağlıklı Geri Çekilme (Pullback) Tespiti
     retest_idx = None
     invalid_reason = None
     max_retest_limit = min(n, breakout_idx + 9)
 
+    max_high_post_bo = highs[breakout_idx]
+    min_low_post_bo = lows[breakout_idx]
+
     for k in range(breakout_idx + 1, max_retest_limit):
         k_atr = atrs[k] if atrs[k] > 0 else bo_atr
-        k_tolerance = 0.35 * k_atr
+        k_tolerance = 0.50 * k_atr
+        max_high_post_bo = max(max_high_post_bo, highs[k])
+        min_low_post_bo = min(min_low_post_bo, lows[k])
 
-        if direction == "LONG" and closes[k] < (bo_level - k_tolerance):
-            invalid_reason = f"Breakout failed: candle closed at ${closes[k]:,.4f} below swing level"
-            break
-        elif direction == "SHORT" and closes[k] > (bo_level + k_tolerance):
-            invalid_reason = f"Breakout failed: candle closed at ${closes[k]:,.4f} above swing level"
-            break
+        if direction == "LONG":
+            if closes[k] < (bo_level - k_tolerance * 1.5):
+                invalid_reason = f"Breakout failed: candle closed at ${closes[k]:,.4f} below swing level"
+                break
+            cond_touch = (lows[k] <= bo_level + k_tolerance * 1.2) and (closes[k] >= bo_level - k_tolerance * 0.7)
+            cond_pullback = (lows[k] <= max_high_post_bo - 0.35 * k_atr) and (closes[k] >= bo_level - k_tolerance * 0.5)
+            cond_flag = (closes[k] < opens[k]) and (closes[k] >= bo_level - k_tolerance * 0.3)
 
-        if direction == "LONG" and lows[k] <= (bo_level + k_tolerance) and closes[k] >= (bo_level - k_tolerance * 0.7):
-            retest_idx = k
-            break
-        elif direction == "SHORT" and highs[k] >= (bo_level - k_tolerance) and closes[k] <= (bo_level + k_tolerance * 0.7):
-            retest_idx = k
-            break
+            if cond_touch or cond_pullback or cond_flag:
+                retest_idx = k
+                break
+        elif direction == "SHORT":
+            if closes[k] > (bo_level + k_tolerance * 1.5):
+                invalid_reason = f"Breakout failed: candle closed at ${closes[k]:,.4f} above swing level"
+                break
+            cond_touch = (highs[k] >= bo_level - k_tolerance * 1.2) and (closes[k] <= bo_level + k_tolerance * 0.7)
+            cond_pullback = (highs[k] >= min_low_post_bo + 0.35 * k_atr) and (closes[k] <= bo_level + k_tolerance * 0.5)
+            cond_flag = (closes[k] > opens[k]) and (closes[k] <= bo_level + k_tolerance * 0.3)
+
+            if cond_touch or cond_pullback or cond_flag:
+                retest_idx = k
+                break
 
     if invalid_reason:
         return {

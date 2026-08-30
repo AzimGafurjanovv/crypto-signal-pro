@@ -1227,3 +1227,37 @@ async function deleteTradeNote(noteId) {
         alert('Not silinirken hata oluştu: ' + e.message);
     }
 }
+// =========================================================================
+// 📥 DIŞA AKTAR (EXPORT CSV & JSON) MOTORU
+// =========================================================================
+
+function toggleExportMenu(e) {
+    if (e) e.stopPropagation();
+    const drop = document.getElementById('exportMenuDropdown');
+    if (drop) drop.classList.toggle('hidden');
+}
+
+function closeExportMenu() {
+    const drop = document.getElementById('exportMenuDropdown');
+    if (drop) drop.classList.add('hidden');
+}
+
+document.addEventListener('click', (e) => {
+    const btn = document.getElementById('exportMenuBtn');
+    const drop = document.getElementById('exportMenuDropdown');
+    if (drop && !drop.classList.contains('hidden')) {
+        if (!btn.contains(e.target) && !drop.contains(e.target)) {
+            drop.classList.add('hidden');
+        }
+    }
+});
+
+function exportTradesCSV() {
+    // Doğrudan backend endpoint'ten UTF-8 BOM CSV indir
+    window.location.href = '/api/journal/export/csv';
+}
+
+function exportTradesJSON() {
+    // Doğrudan backend endpoint'ten tam yedek JSON indir
+    window.location.href = '/api/journal/export/json';
+}

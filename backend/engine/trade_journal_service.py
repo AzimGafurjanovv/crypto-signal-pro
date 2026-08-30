@@ -444,6 +444,52 @@ class TradeJournalManager:
             "daily_calendar": daily_calendar
         }
 
+    def generate_trades_csv(self) -> str:
+        """İşlemleri Excel / Google Sheets uyumlu UTF-8 CSV formatında üretir."""
+        import csv
+        import io
+        output = io.StringIO()
+        output.write('\ufeff') # UTF-8 BOM
+        writer = csv.writer(output, delimiter=';')
+        writer.writerow([
+            "İşlem ID", "Giriş Tarihi", "Parite", "Yön", "Kaldıraç",
+            "Marjin ($)", "Toplam Pozisyon ($)", "Giriş Fiyatı", "Stop Loss",
+            "Hedef (TP)", "Çıkış Fiyatı", "Çıkış Tarihi", "Komisyon ($)",
+            "Net Kâr ($)", "Net ROE (%)", "R:R Oranı", "Durum", "Strateji", "Notlar"
+        ])
+        for t in self.get_all_trades():
+            writer.writerow([
+                t.get("id", ""),
+                t.get("entry_date_str", ""),
+                t.get("symbol", ""),
+                t.get("direction", ""),
+                f"{t.get('leverage', 1)}x",
+                t.get("margin", 0.0),
+                t.get("position_size", 0.0),
+                t.get("entry_price", 0.0),
+                t.get("stop_loss", 0.0),
+                t.get("target_price", 0.0),
+                t.get("exit_price") or "",
+                t.get("exit_date_str") or "",
+                t.get("fee", 0.0),
+                t.get("pnl_amount", 0.0),
+                f"%{t.get('pnl_percent', 0.0)}",
+                t.get("risk_reward", 0.0),
+                t.get("status", ""),
+                t.get("strategy", ""),
+                (t.get("notes") or "").replace("\n", " ").replace(";", ",")
+            ])
+        return output.getvalue()
+
+    def get_full_export_data(self) -> Dict[str, Any]:
+        """Tüm günlük, kasa ayarları ve istatistiklerin tam yedek JSON nesnesi."""
+        return {
+            "exported_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "settings": self.settings,
+            "stats": self.get_stats(),
+            "trades": self.get_all_trades()
+        }
+
 
 class TradeNotesAlertManager:
     def __init__(self):

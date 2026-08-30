@@ -872,6 +872,27 @@ async def delete_journal_trade(trade_id: str):
         raise HTTPException(status_code=404, detail="İşlem bulunamadı.")
     return {"status": "success", "message": "İşlem günlükten silindi."}
 
+@app.get("/api/journal/export/csv")
+async def export_journal_csv():
+    csv_content = trade_journal_manager.generate_trades_csv()
+    filename = f"Trade_Gunlugu_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(
+        content=csv_content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@app.get("/api/journal/export/json")
+async def export_journal_json():
+    data = trade_journal_manager.get_full_export_data()
+    filename = f"Trade_Gunlugu_Yedek_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    json_str = json.dumps(data, indent=2, ensure_ascii=False)
+    return Response(
+        content=json_str,
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
 
 # --- 📝 TRADE NOTLARI & ÖZEL FİYAT ALARMI API ---
 @app.get("/api/trade-notes")

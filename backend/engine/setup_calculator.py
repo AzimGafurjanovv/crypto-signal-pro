@@ -171,9 +171,16 @@ def _evaluate_super_trader_long(
         score += DISQUALIFIERS['low_volume_breakout']
         vetos.append("Anlık mum hacmi zayıf (Son 20 mum ortalamasının %75 altında): Sahte kırılım ihtimali yüksek.")
 
-    if mtf_data and mtf_data.get('timeframes', {}).get('1d', {}).get('signal') == '🔴 SHORT' and not bullish_sweeps and not div_data['bullish_divergence']:
-        score += DISQUALIFIERS['against_macro_trend']
-        vetos.append("Günlük (1d) makro trend GÜÇLÜ AYI yönünde; retest veya uyumsuzluk olmadan tepki alımı riskli.")
+    if mtf_data:
+        htf_4h = mtf_data.get('timeframes', {}).get('4h', {})
+        htf_ema200 = float(htf_4h.get('ema200', 0.0))
+        if htf_ema200 > 0 and current_price < htf_ema200 and current_price >= htf_ema200 * 0.98:
+            score += DISQUALIFIERS['htf_resistance_wall']
+            vetos.append(f"4h EMA200 (${htf_ema200:,.4f}) majör direnç duvarının hemen altındayız (%2). Long için yüksek risk!")
+
+        if mtf_data.get('timeframes', {}).get('1d', {}).get('signal') == '🔴 SHORT' and not bullish_sweeps and not div_data['bullish_divergence']:
+            score += DISQUALIFIERS['against_macro_trend']
+            vetos.append("Günlük (1d) makro trend GÜÇLÜ AYI yönünde; retest veya uyumsuzluk olmadan tepki alımı riskli.")
 
     return score, long_reasons, strategies, vetos, supports_resistances
 
@@ -305,9 +312,16 @@ def _evaluate_super_trader_short(
         score += DISQUALIFIERS['low_volume_breakout']
         vetos.append("Anlık mum hacmi zayıf (Son 20 mum ortalamasının %75 altında): Sahte kırılım ihtimali yüksek.")
 
-    if mtf_data and mtf_data.get('timeframes', {}).get('1d', {}).get('signal') == '🟢 LONG' and not bearish_sweeps and not div_data['bearish_divergence']:
-        score += DISQUALIFIERS['against_macro_trend']
-        vetos.append("Günlük (1d) makro trend GÜÇLÜ BOĞA yönünde; retest veya uyumsuzluk olmadan short riski yüksek.")
+    if mtf_data:
+        htf_4h = mtf_data.get('timeframes', {}).get('4h', {})
+        htf_ema200 = float(htf_4h.get('ema200', 0.0))
+        if htf_ema200 > 0 and current_price > htf_ema200 and current_price <= htf_ema200 * 1.02:
+            score += DISQUALIFIERS['htf_support_wall']
+            vetos.append(f"4h EMA200 (${htf_ema200:,.4f}) majör destek duvarının hemen üzerindeyiz (%2). Short için yüksek risk!")
+
+        if mtf_data.get('timeframes', {}).get('1d', {}).get('signal') == '🟢 LONG' and not bearish_sweeps and not div_data['bearish_divergence']:
+            score += DISQUALIFIERS['against_macro_trend']
+            vetos.append("Günlük (1d) makro trend GÜÇLÜ BOĞA yönünde; retest veya uyumsuzluk olmadan short riski yüksek.")
 
     return score, short_reasons, strategies, vetos, supports_resistances
 
@@ -464,13 +478,14 @@ def calculate_crypto_setup(
         tp3 = round(entry_price - risk * 4.0, 4)
         rr_ratio = round((entry_price - tp2) / risk, 2)
         stop_loss = round(stop_loss, 4)
-        is_invalidated = False
 
     if rr_ratio >= 2.0 and confidence_score >= 50:
         confidence_score = min(99, confidence_score + LAYER_WEIGHTS['high_rr_bonus'])
         score_grade, score_desc = _get_super_trader_grade(confidence_score)
         direction_label = f"{'🟢' if is_long else '🔴'} {score_grade} ({direction_str})"
 
+    # Veto veya düşük güven durumunda setup geçersizliği (Invalidated) tespiti
+    is_invalidated = bool(len(vetos) >= 2 or confidence_score < 40)
 
     # Hassas 24 Saatlik Fiyat Değişimi & 24 Saatlik Toplam Hacim Karşılaştırması
     idx_24h = -24 if len(df) >= 24 else -len(df)

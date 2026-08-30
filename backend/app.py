@@ -513,13 +513,16 @@ def build_raw_setup_fallback(symbol: str, df: pd.DataFrame, timeframe: str = "1h
     price_24h_ago = float(df_enriched['close'].iloc[-24]) if len(df_enriched) >= 24 else float(df_enriched['close'].iloc[0])
     p_change_24h = round(((current_price - price_24h_ago) / price_24h_ago) * 100.0, 2) if price_24h_ago else 0.0
 
+    # Asıl motor iptal ettiğinde fallback dinamik düşük/nötr skor üretmelidir
+    fallback_score = 25 if (current_price < ema50 and rsi < 45) or (current_price > ema50 and rsi > 55) else 32
+
     return {
         "symbol": symbol,
         "timeframe": timeframe,
         "raw_candles_table": raw_candles_table,
         "direction": direction,
         "direction_label": direction_label,
-        "confidence_score": 50,
+        "confidence_score": fallback_score,
         "score_grade": "⚪ STANDART PİYASA VERİSİ",
         "rr_ratio": 2.5,
         "current_price": current_price,
@@ -535,6 +538,7 @@ def build_raw_setup_fallback(symbol: str, df: pd.DataFrame, timeframe: str = "1h
         "primary_strategy": "Canlı Ham Piyasa Verisi (Raw Market Data & Trends)",
         "strategies": ["Canlı Ham Piyasa Verisi (Raw Market Data & Trends)"],
         "patterns": [],
+        "is_invalidated": True,
         "reasons": [
             f"Fiyat ${current_price:,.4f} seviyesinde işlem görüyor.",
             f"RSI({rsi:.1f}) ve Supertrend({supertrend}) aktif piyasa dinamiklerini yansıtıyor.",

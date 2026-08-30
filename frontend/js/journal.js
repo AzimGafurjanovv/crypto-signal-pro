@@ -75,6 +75,27 @@ function initFlatpickrInstances() {
             defaultDate: new Date()
         });
     }
+
+    const dateOnlyConfig = {
+        enableTime: false,
+        dateFormat: "Y-m-d",
+        theme: "dark",
+        disableMobile: "true"
+    };
+    try {
+        if (flatpickr.l10ns && flatpickr.l10ns.tr) {
+            dateOnlyConfig.locale = flatpickr.l10ns.tr;
+        }
+    } catch(e) {}
+
+    const elExpStart = document.getElementById('exportStartDate');
+    if (elExpStart) {
+        flatpickr(elExpStart, dateOnlyConfig);
+    }
+    const elExpEnd = document.getElementById('exportEndDate');
+    if (elExpEnd) {
+        flatpickr(elExpEnd, dateOnlyConfig);
+    }
 }
 
 function setQuickDate(daysAgo, inputId) {
@@ -1228,36 +1249,131 @@ async function deleteTradeNote(noteId) {
     }
 }
 // =========================================================================
-// 📥 DIŞA AKTAR (EXPORT CSV & JSON) MOTORU
+// 📥 DIŞA AKTAR (EXPORT CSV & JSON) MOTORU & TARİH ARALIĞI SEÇİMİ
 // =========================================================================
 
-function toggleExportMenu(e) {
-    if (e) e.stopPropagation();
-    const drop = document.getElementById('exportMenuDropdown');
-    if (drop) drop.classList.toggle('hidden');
-}
+let activeExportPreset = 'ALL';
 
-function closeExportMenu() {
-    const drop = document.getElementById('exportMenuDropdown');
-    if (drop) drop.classList.add('hidden');
-}
-
-document.addEventListener('click', (e) => {
-    const btn = document.getElementById('exportMenuBtn');
-    const drop = document.getElementById('exportMenuDropdown');
-    if (drop && !drop.classList.contains('hidden')) {
-        if (!btn.contains(e.target) && !drop.contains(e.target)) {
-            drop.classList.add('hidden');
-        }
+function openExportModal() {
+    setExportRangePreset('ALL');
+    const modal = document.getElementById('exportModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
     }
-});
-
-function exportTradesCSV() {
-    // Doğrudan backend endpoint'ten UTF-8 BOM CSV indir
-    window.location.href = '/api/journal/export/csv';
 }
 
-function exportTradesJSON() {
-    // Doğrudan backend endpoint'ten tam yedek JSON indir
-    window.location.href = '/api/journal/export/json';
+function closeExportModal() {
+    const modal = document.getElementById('exportModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+}
+
+function setExportRangePreset(preset) {
+    activeExportPreset = preset;
+    document.querySelectorAll('.exp-preset-btn').forEach(btn => {
+        btn.className = 'exp-preset-btn px-2.5 py-1.5 rounded-xl bg-gray-950 border border-gray-800 text-gray-300 hover:text-white transition';
+    });
+    const activeBtn = document.getElementById(`expPreset_${preset}`);
+    if (activeBtn) {
+        activeBtn.className = 'exp-preset-btn px-2.5 py-1.5 rounded-xl bg-indigo-600 text-white font-bold transition';
+    }
+
+    const startInp = document.getElementById('exportStartDate');
+    const endInp = document.getElementById('exportEndDate');
+    if (!startInp || !endInp) return;
+
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const formatD = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    if (preset === 'ALL') {
+        startInp.value = '';
+        endInp.value = '';
+        if (startInp._flatpickr) startInp._flatpickr.clear();
+        if (endInp._flatpickr) endInp._flatpickr.clear();
+    } else if (preset === 'THIS_MONTH') {
+        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+        const sVal = formatD(firstDay);
+        const eVal = formatD(now);
+        startInp.value = sVal;
+        endInp.value = eVal;
+        if (startInp._flatpickr) startInp._flatpickr.setDate(sVal, true);
+        if (endInp._flatpickr) endInp._flatpickr.setDate(eVal, true);
+    } else if (preset === 'LAST_MONTH') {
+        const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+        const sVal = formatD(firstDayLastMonth);
+        const eVal = formatD(lastDayLastMonth);
+        startInp.value = sVal;
+        endInp.value = eVal;
+        if (startInp._flatpickr) startInp._flatpickr.setDate(sVal, true);
+        if (endInp._flatpickr) endInp._flatpickr.setDate(eVal, true);
+    } else if (preset === 'LAST_7_DAYS') {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        const sVal = formatD(sevenDaysAgo);
+        const eVal = formatD(now);
+        startInp.value = sVal;
+        endInp.value = eVal;
+        if (startInp._flatpickr) startInp._flatpickr.setDate(sVal, true);
+        if (endInp._flatpickr) endInp._flatpickr.setDate(eVal, true);
+    } else if (preset === 'LAST_30_DAYS') {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const sVal = formatD(thirtyDaysAgo);
+        const eVal = formatD(now);
+        startInp.value = sVal;
+        endInp.value = eVal;
+        if (startInp._flatpickr) startInp._flatpickr.setDate(sVal, true);
+        if (endInp._flatpickr) endInp._flatpickr.setDate(eVal, true);
+    }
+}
+
+async function executeExportDownload(format) {
+    const startDate = document.getElementById('exportStartDate')?.value.trim() || '';
+    const endDate = document.getElementById('exportEndDate')?.value.trim() || '';
+    const status = document.getElementById('exportStatus')?.value || 'ALL';
+    const symbol = document.getElementById('exportSymbol')?.value.toUpperCase().trim() || '';
+
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    if (status && status !== 'ALL') params.append('status', status);
+    if (symbol) params.append('symbol', symbol);
+
+    const url = `/api/journal/export/${format}?${params.toString()}`;
+
+    try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('İndirme başarısız oldu: HTTP ' + res.status);
+
+        // Content-Disposition başlığından dosya adını al
+        let filename = `Trade_Gunlugu_${format.toUpperCase()}.${format}`;
+        const disp = res.headers.get('Content-Disposition');
+        if (disp && disp.includes('filename=')) {
+            const match = disp.match(/filename="?([^"]+)"?/);
+            if (match && match[1]) filename = match[1];
+        }
+
+        const blob = await res.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        
+        setTimeout(() => {
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(blobUrl);
+        }, 200);
+
+        closeExportModal();
+    } catch (e) {
+        alert('Dışa aktarma sırasında hata oluştu: ' + e.message);
+    }
 }

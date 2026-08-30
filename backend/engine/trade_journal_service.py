@@ -113,11 +113,12 @@ class TradeJournalManager:
 
     def get_all_trades(self, status: Optional[str] = None, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
         result = self.trades
-        if status and status != "ALL":
+        if status and isinstance(status, str) and status != "ALL":
             result = [t for t in result if t.get("status") == status]
-        if symbol:
+        if symbol and isinstance(symbol, str):
             sym_clean = symbol.upper().strip()
-            result = [t for t in result if sym_clean in t.get("symbol", "")]
+            if sym_clean and sym_clean != "ALL":
+                result = [t for t in result if sym_clean in t.get("symbol", "")]
         # En yeni işlem en üstte
         return sorted(result, key=lambda x: x.get("created_at", 0), reverse=True)
 
@@ -444,7 +445,37 @@ class TradeJournalManager:
             "daily_calendar": daily_calendar
         }
 
-    def generate_trades_csv(self) -> str:
+    def filter_trades(
+        self,
+        status: Optional[str] = None,
+        symbol: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        trades = self.get_all_trades(status=status, symbol=symbol)
+        if not start_date and not end_date:
+            return trades
+
+        filtered = []
+        for t in trades:
+            d_str = str(t.get("entry_date_str") or "")[:10]
+            if not d_str:
+                filtered.append(t)
+                continue
+            if start_date and d_str < start_date[:10]:
+                continue
+            if end_date and d_str > end_date[:10]:
+                continue
+            filtered.append(t)
+        return filtered
+
+    def generate_trades_csv(
+        self,
+        status: Optional[str] = None,
+        symbol: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> str:
         """İşlemleri Excel / Google Sheets uyumlu UTF-8 CSV formatında üretir."""
         import csv
         import io
@@ -457,7 +488,9 @@ class TradeJournalManager:
             "Hedef (TP)", "Çıkış Fiyatı", "Çıkış Tarihi", "Komisyon ($)",
             "Net Kâr ($)", "Net ROE (%)", "R:R Oranı", "Durum", "Strateji", "Notlar"
         ])
-        for t in self.get_all_trades():
+        
+        target_trades = self.filter_trades(status=status, symbol=symbol, start_date=start_date, end_date=end_date)
+        for t in target_trades:
             writer.writerow([
                 t.get("id", ""),
                 t.get("entry_date_str", ""),
@@ -481,13 +514,27 @@ class TradeJournalManager:
             ])
         return output.getvalue()
 
-    def get_full_export_data(self) -> Dict[str, Any]:
+    def get_full_export_data(
+        self,
+        status: Optional[str] = None,
+        symbol: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Tüm günlük, kasa ayarları ve istatistiklerin tam yedek JSON nesnesi."""
+        target_trades = self.filter_trades(status=status, symbol=symbol, start_date=start_date, end_date=end_date)
         return {
             "exported_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "filter_range": {
+                "start_date": start_date or "ALL",
+                "end_date": end_date or "ALL",
+                "status": status or "ALL",
+                "symbol": symbol or "ALL"
+            },
+            "total_exported_trades": len(target_trades),
             "settings": self.settings,
             "stats": self.get_stats(),
-            "trades": self.get_all_trades()
+            "trades": target_trades
         }
 
 

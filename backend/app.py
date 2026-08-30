@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import math
 import time
 import asyncio
@@ -7,7 +8,7 @@ from datetime import datetime
 from contextlib import asynccontextmanager
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -873,24 +874,52 @@ async def delete_journal_trade(trade_id: str):
     return {"status": "success", "message": "İşlem günlükten silindi."}
 
 @app.get("/api/journal/export/csv")
-async def export_journal_csv():
-    csv_content = trade_journal_manager.generate_trades_csv()
-    filename = f"Trade_Gunlugu_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+async def export_journal_csv(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    status: Optional[str] = Query("ALL"),
+    symbol: Optional[str] = Query(None)
+):
+    csv_content = trade_journal_manager.generate_trades_csv(
+        status=status,
+        symbol=symbol,
+        start_date=start_date,
+        end_date=end_date
+    )
+    range_tag = f"_{start_date}_to_{end_date}" if start_date or end_date else "_Tumu"
+    filename = f"Trade_Gunlugu{range_tag}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     return Response(
         content=csv_content,
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
     )
 
 @app.get("/api/journal/export/json")
-async def export_journal_json():
-    data = trade_journal_manager.get_full_export_data()
-    filename = f"Trade_Gunlugu_Yedek_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+async def export_journal_json(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    status: Optional[str] = Query("ALL"),
+    symbol: Optional[str] = Query(None)
+):
+    data = trade_journal_manager.get_full_export_data(
+        status=status,
+        symbol=symbol,
+        start_date=start_date,
+        end_date=end_date
+    )
+    range_tag = f"_{start_date}_to_{end_date}" if start_date or end_date else "_Tumu"
+    filename = f"Trade_Gunlugu_Yedek{range_tag}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     json_str = json.dumps(data, indent=2, ensure_ascii=False)
     return Response(
         content=json_str,
         media_type="application/json; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
     )
 
 

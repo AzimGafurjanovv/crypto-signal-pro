@@ -127,7 +127,7 @@ class StrategyAlertService:
         # Round to 2 decimal places to avoid float precision spam (94.0 vs 94.00001)
         raw_level = coin.get("breakout_level") or coin.get("pdh") or coin.get("pdl") or coin.get("swing_level", 0.0)
         bo_level = round(float(raw_level or 0.0), 2)
-        bo_bar = coin.get("breakout_bar", {})
+        bo_bar = coin.get("breakout_bar") or {}
         bo_time = bo_bar.get("time_str") or bo_bar.get("iso_time") or str(bo_bar.get("timestamp", ""))
         pat_name = coin.get("strategy_name", "")
         return f"{strat_type}_{tf}_{symbol}_{direction}_{bo_level}_{bo_time}_{pat_name}"
@@ -149,7 +149,8 @@ class StrategyAlertService:
                         continue
 
                 # Tazelik Filtresi (Son 2 saat = 7200 sn içinde olmalı)
-                rt_ts = coin.get("retest_bar", {}).get("timestamp", 0)
+                rt_bar = coin.get("retest_bar") or {}
+                rt_ts = rt_bar.get("timestamp", 0) if isinstance(rt_bar, dict) else 0
                 if rt_ts > 0 and (now - rt_ts) > 7200:
                     continue # Eski bar, bildirim atma
 
@@ -187,7 +188,8 @@ class StrategyAlertService:
                         continue
 
                 # Tazelik Filtresi (Son 2 saat = 7200 sn içinde olmalı)
-                conf_ts = coin.get("confirmed_bar", {}).get("timestamp", 0)
+                conf_bar = coin.get("confirmed_bar") or {}
+                conf_ts = conf_bar.get("timestamp", 0) if isinstance(conf_bar, dict) else 0
                 if conf_ts > 0 and (now - conf_ts) > 7200:
                     continue # Eski bar, bildirim atma
 

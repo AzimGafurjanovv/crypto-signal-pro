@@ -158,8 +158,8 @@ function setupAutoRefresh(seconds) {
 }
 
 async function fetchActiveRadarData(showLoadingFull = false, isSilentBackground = false) {
-    if (isFetchingInProgress) return;
-    isFetchingInProgress = true;
+    const fetchId = ++currentFetchId;
+    const stratAtRequest = activeStrategy;
 
     const tfSelect = document.getElementById('timeframeSelect');
     const swingLookback = document.getElementById('swingLookbackSelect');
@@ -191,6 +191,9 @@ async function fetchActiveRadarData(showLoadingFull = false, isSilentBackground 
         const res = await fetch(url);
         const data = await res.json();
 
+        // Race condition guard: ignore response if user already switched strategy or triggered a newer fetch
+        if (fetchId !== currentFetchId || stratAtRequest !== activeStrategy) return;
+
         if (data.status === 'success') {
             currentRadarData = data;
             
@@ -207,11 +210,13 @@ async function fetchActiveRadarData(showLoadingFull = false, isSilentBackground 
     } catch (e) {
         console.error('Fetch radar error:', e);
     } finally {
-        isFetchingInProgress = false;
-        if (runBtn) {
-            runBtn.disabled = false;
-            runBtn.innerHTML = `<i data-lucide="refresh-cw" class="w-4 h-4"></i> <span>RADARI CANLI TARA</span>`;
-            lucide.createIcons();
+        if (fetchId === currentFetchId) {
+            isFetchingInProgress = false;
+            if (runBtn) {
+                runBtn.disabled = false;
+                runBtn.innerHTML = `<i data-lucide="refresh-cw" class="w-4 h-4"></i> <span>RADARI CANLI TARA</span>`;
+                lucide.createIcons();
+            }
         }
     }
 }
@@ -219,54 +224,54 @@ async function fetchActiveRadarData(showLoadingFull = false, isSilentBackground 
 function applyRadarFiltersAndRender() {
     if (!currentRadarData || !currentRadarData.stages) return;
 
-    const dirFilter = document.getElementById('directionFilter') ? document.getElementById('directionFilter').value : 'ALL';
-    const patCatFilter = document.getElementById('patternCategorySelect') ? document.getElementById('patternCategorySelect').value : 'ALL';
-    const query = document.getElementById('coinSearchInput') ? document.getElementById('coinSearchInput').value.trim().toLowerCase() : '';
+    const patternCatSelect = document.getElementById('patternCategorySelect');
+    const dirFilter = document.getElementById('directionFilter');
+    const searchInput = document.getElementById('coinSearchInput');
 
-    const filterFn = (item) => {
-        if (dirFilter !== 'ALL' && item.direction !== dirFilter) return false;
-        if (activeStrategy === 'CHART_PATTERNS' && patCatFilter !== 'ALL') {
-            const itemCat = item.pattern_category || 'TRENDLINE';
-            if (itemCat !== patCatFilter) return false;
-        }
-        if (query && !item.symbol.toLowerCase().includes(query)) return false;
+    const catVal = patternCatSelect ? patternCatSelect.value : 'ALL';
+    const dirVal = dirFilter ? dirFilter.value : 'ALL';
+    const query = searchInput ? searchInput.value.trim().toUpperCase() : '';
+
+    const filterFn = (c) => {
+        if (query && !c.symbol.toUpperCase().includes(query)) return false;
+        if (dirVal !== 'ALL' && c.direction !== dirVal) return false;
+        if (activeStrategy === 'CHART_PATTERNS' && catVal !== 'ALL' && c.pattern_category !== catVal) return false;
         return true;
     };
 
-    const breakoutList = (currentRadarData.stages.breakout || []).filter(filterFn);
-    const retestList = (currentRadarData.stages.retesting || []).filter(filterFn);
-    const confirmedList = (currentRadarData.stages.confirmed || []).filter(filterFn);
+    const boFiltered = (currentRadarData.stages.breakout || []).filter(filterFn);
+    const rtFiltered = (currentRadarData.stages.retesting || []).filter(filterFn);
+    const cfFiltered = (currentRadarData.stages.confirmed || []).filter(filterFn);
 
-    // Kolon Badge Sayıları
-    if (document.getElementById('col1BadgeCount')) document.getElementById('col1BadgeCount').textContent = breakoutList.length;
-    if (document.getElementById('col2BadgeCount')) document.getElementById('col2BadgeCount').textContent = retestList.length;
-    if (document.getElementById('col3BadgeCount')) document.getElementById('col3BadgeCount').textContent = confirmedList.length;
+    renderColumnList('colBreakoutList', boFiltered, 'breakout');
+    renderColumnList('colRetestList', rtFiltered, 'retest');
+    renderColumnList('colConfirmedList', cfFiltered, 'confirmed');
 
-    // Kolonları Doldur
-    renderColumnList('colBreakoutList', breakoutList, 'breakout');
-    renderColumnList('colRetestList', retestList, 'retest');
-    renderColumnList('colConfirmedList', confirmedList, 'confirmed');
+    if (document.getElementById('col1BadgeCount')) document.getElementById('col1BadgeCount').textContent = boFiltered.length;
+    if (document.getElementById('col2BadgeCount')) document.getElementById('col2BadgeCount').textContent = rtFiltered.length;
+    if (document.getElementById('col3BadgeCount')) document.getElementById('col3BadgeCount').textContent = cfFiltered.length;
 
     lucide.createIcons();
 }
 
-function renderColumnList(containerId, list, type) {
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    container.innerHTML = '';
+function renderColumnList(containerId, coins, type) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
 
-    if (!list || list.length === 0) {
-        container.innerHTML = `
-            <div class="p-6 rounded-2xl bg-gray-950/40 border border-gray-800/60 text-center space-y-2">
-                <div class="text-xs text-gray-500 font-medium">Bu kriterde aktif coin bulunamadı</div>
+    if (!coins || coins.length === 0) {
+        el.innerHTML = `
+            <div class="p-6 text-center text-gray-500 rounded-2xl border border-dashed border-gray-800 text-xs">
+                Bu aşamada eşleşen kripto para bulunamadı.
             </div>
         `;
         return;
     }
 
-    list.forEach(c => {
+    const curTf = document.getElementById('timeframeSelect')?.value || '1h';
+    el.innerHTML = '';
+    coins.forEach(c => {
         const isLong = c.direction === 'LONG';
-        const levelLabel = activeStrategy === 'PDH_PDL'
+        const levelName = activeStrategy === 'PDH_PDL' 
             ? (isLong ? 'PDH' : 'PDL')
             : (activeStrategy === 'SWING_HL' ? (isLong ? 'Swing High' : 'Swing Low') : (c.strategy_name || 'Formasyon'));
 
@@ -278,7 +283,7 @@ function renderColumnList(containerId, list, type) {
 
         const tfBadge = c.timeframe_badge 
             ? `<span class="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30 text-[9px] font-mono">${c.timeframe_badge}</span>`
-            : `<span class="px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 font-bold border border-gray-700 text-[9px] font-mono">${(c.timeframe || currentRadarTimeframe).toUpperCase()}</span>`;
+            : `<span class="px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 font-bold border border-gray-700 text-[9px] font-mono">${(c.timeframe || curTf).toUpperCase()}</span>`;
 
         const qualityBadge = c.quality_score 
             ? `<span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 text-[9px] font-mono">%${c.quality_score} Kalite</span>`
@@ -447,8 +452,27 @@ async function openRadarChartModal(coin) {
     if (modalBacktestBtn) {
         modalBacktestBtn.href = `/backtest.html?symbol=${encodeURIComponent(coin.symbol)}&timeframe=${encodeURIComponent(coin.timeframe || '1h')}`;
     }
+
+    const pdhLabelEl = document.getElementById('badgePdhLabel');
+    const pdlLabelEl = document.getElementById('badgePdlLabel');
+    if (pdhLabelEl && pdlLabelEl) {
+        if (activeStrategy === 'PDH_PDL') {
+            pdhLabelEl.textContent = 'DÜNKÜ ZİRVE (PDH)';
+            pdlLabelEl.textContent = 'DÜNKÜ DİP (PDL)';
+        } else if (activeStrategy === 'SWING_HL') {
+            pdhLabelEl.textContent = 'SWING SEVİYESİ';
+            pdlLabelEl.textContent = 'ONAY ZAMANI';
+        } else {
+            pdhLabelEl.textContent = 'KIRILAN SEVİYE';
+            pdlLabelEl.textContent = 'FORMASYON HEDEFİ';
+        }
+    }
+
     if (document.getElementById('badgePdh')) document.getElementById('badgePdh').textContent = `$${formatPrice(coin.pdh || coin.swing_level || levelPrice)}`;
-    if (document.getElementById('badgePdl')) document.getElementById('badgePdl').textContent = `$${formatPrice(coin.pdl || coin.swing_level || levelPrice)}`;
+    if (document.getElementById('badgePdl')) {
+        const pdlVal = activeStrategy === 'CHART_PATTERNS' ? (coin.take_profit || coin.tp1) : (coin.pdl || coin.swing_level || levelPrice);
+        document.getElementById('badgePdl').textContent = pdlVal ? `$${formatPrice(pdlVal)}` : (coin.swing_confirmed_time || '$0.00');
+    }
     if (document.getElementById('badgeEntry')) document.getElementById('badgeEntry').textContent = `$${formatPrice(coin.entry_price || coin.current_price)}`;
     if (document.getElementById('badgeSl')) document.getElementById('badgeSl').textContent = `$${formatPrice(coin.stop_loss)}`;
     const tpPrice = coin.take_profit || coin.tp1;

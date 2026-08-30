@@ -227,22 +227,26 @@ def chat_with_gemini(
     )
 
     if history and len(history) > 0:
-        # Always prepend system prompt to first user message if not already there
         for turn in history:
             role = "user" if turn.get("role") in ["user", "human"] else "model"
             text = turn.get("content", "").strip()
-            if text:
-                # For the first user turn, prepend the system prompt
-                if not contents and role == "user":
-                    text = f"{system_prompt}\n\n{text}"
-                contents.append({
-                    "role": role,
-                    "parts": [{"text": text}]
-                })
-        contents.append({
-            "role": "user",
-            "parts": [{"text": message}]
-        })
+            if not text:
+                continue
+            if not contents and role == "user":
+                text = f"{system_prompt}\n\n{text}"
+
+            if contents and contents[-1]["role"] == role:
+                contents[-1]["parts"][0]["text"] += f"\n\n{text}"
+            else:
+                contents.append({"role": role, "parts": [{"text": text}]})
+
+        if contents and contents[-1]["role"] == "user":
+            contents[-1]["parts"][0]["text"] += f"\n\n{message}"
+        else:
+            contents.append({
+                "role": "user",
+                "parts": [{"text": f"{system_prompt}\n\n{message}" if not contents else message}]
+            })
     else:
         contents.append({
             "role": "user",

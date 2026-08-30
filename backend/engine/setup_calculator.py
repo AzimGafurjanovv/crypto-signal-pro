@@ -436,8 +436,7 @@ def calculate_crypto_setup(
     for _, row in tail_df.iterrows():
         ts = int(row['timestamp']) if 'timestamp' in row else 0
         if ts > 1e12: ts = ts // 1000
-        from datetime import datetime as dt
-        date_str = dt.fromtimestamp(ts).strftime("%m-%d %H:%M") if ts > 0 else "N/A"
+        date_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%m-%d %H:%M UTC") if ts > 0 else "N/A"
         o, h, l, c, v = float(row['open']), float(row['high']), float(row['low']), float(row['close']), float(row['volume'])
         candle_dir = "🟢" if c >= o else "🔴"
         body_pct = abs(c - o) / o * 100 if o > 0 else 0

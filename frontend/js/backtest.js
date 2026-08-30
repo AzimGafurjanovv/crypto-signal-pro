@@ -496,12 +496,19 @@ function renderTradesTable(trades, strategyName) {
             <td class="py-2.5 px-3 text-right font-bold text-xs ${pnlColor}">${t.pnl_pct > 0 ? '+' : ''}%${t.pnl_pct}</td>
             <td class="py-2.5 px-3 text-center">${outcomeBadge}</td>
             <td class="py-2.5 px-3 text-right">
-                <button onclick="event.stopPropagation(); openTradeDetailModal(${JSON.stringify(t).replace(/"/g, '&quot;')})" class="px-2.5 py-1 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300 text-[11px] font-bold transition flex items-center gap-1 ml-auto">
+                <button class="open-modal-btn px-2.5 py-1 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300 text-[11px] font-bold transition flex items-center gap-1 ml-auto">
                     <i data-lucide="line-chart" class="w-3.5 h-3.5"></i>
                     <span>Grafiği Aç</span>
                 </button>
             </td>
         `;
+        const modalBtn = row.querySelector('.open-modal-btn');
+        if (modalBtn) {
+            modalBtn.onclick = (e) => {
+                e.stopPropagation();
+                openTradeDetailModal(t);
+            };
+        }
         tradesTbody.appendChild(row);
     });
 
@@ -519,24 +526,25 @@ function openTradeDetailModal(trade) {
     const modal = document.getElementById('tradeDetailModal');
     if (!modal) return;
 
-    // 1. Header Bilgileri
-    const dirBadge = document.getElementById('modalTradeDirBadge');
+    // 1. Başlık ve Rozet Bilgileri
+    const dirBadge = document.getElementById('modalDirBadge');
     if (dirBadge) {
         dirBadge.textContent = trade.direction === 'LONG' ? '🟢 LONG İŞLEM' : '🔴 SHORT İŞLEM';
         dirBadge.className = trade.direction === 'LONG'
-            ? 'px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/40 text-xs font-mono'
-            : 'px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-400 font-bold border border-rose-500/40 text-xs font-mono';
+            ? 'px-3 py-1 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold font-mono text-xs'
+            : 'px-3 py-1 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/40 font-bold font-mono text-xs';
     }
 
-    const titleEl = document.getElementById('modalTradeStratTitle');
-    if (titleEl) titleEl.textContent = trade.strategy_name || "Strateji İşlem Detayı";
+    if (document.getElementById('modalTradeSymbol')) {
+        document.getElementById('modalTradeSymbol').textContent = trade.symbol;
+    }
+    if (document.getElementById('modalTradeSubtitle')) {
+        document.getElementById('modalTradeSubtitle').textContent = `${trade.strategy_name || trade.strategy || 'Strateji'} • ${trade.entry_time}`;
+    }
 
-    const subtitleEl = document.getElementById('modalTradeSubtitle');
-    if (subtitleEl) subtitleEl.textContent = `İşleme Giriş: ${trade.entry_time} • Pozisyon Çıkışı: ${trade.exit_time} (${trade.exit_reason || 'Bilinmiyor'})`;
-
-    const outcomeBadge = document.getElementById('modalTradeOutcomeBadge');
+    const outcomeBadge = document.getElementById('modalOutcomeBadge');
     if (outcomeBadge) {
-        outcomeBadge.textContent = trade.is_win ? `✓ TP ALINDI (+%${trade.pnl_pct})` : `✗ STOP OLDU (%${trade.pnl_pct})`;
+        outcomeBadge.textContent = trade.is_win ? `✅ BAŞARILI (+%${trade.pnl_pct})` : `❌ STOP / ZARAR (%${trade.pnl_pct})`;
         outcomeBadge.className = trade.is_win
             ? 'px-3 py-1 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold font-mono text-xs'
             : 'px-3 py-1 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/40 font-bold font-mono text-xs';
@@ -547,7 +555,8 @@ function openTradeDetailModal(trade) {
     if (document.getElementById('badgeStopLoss')) document.getElementById('badgeStopLoss').textContent = `$${formatPrice(trade.stop_loss)}`;
     if (document.getElementById('badgeTp1')) document.getElementById('badgeTp1').textContent = `$${formatPrice(trade.tp1 || trade.take_profit)}`;
     if (document.getElementById('badgeTp2')) document.getElementById('badgeTp2').textContent = `$${formatPrice(trade.tp2 || trade.take_profit)}`;
-    if (document.getElementById('badgeTp3')) document.getElementById('badgeTp3').textContent = `$${formatPrice(trade.tp3 || trade.take_profit * 1.5)}`;
+    const tp3Val = trade.tp3 || (trade.take_profit ? trade.take_profit * 1.5 : (trade.tp2 || trade.entry_price));
+    if (document.getElementById('badgeTp3')) document.getElementById('badgeTp3').textContent = `$${formatPrice(tp3Val)}`;
 
     // 3. Açıklama Metni
     const explEl = document.getElementById('modalTradeExplanationText');

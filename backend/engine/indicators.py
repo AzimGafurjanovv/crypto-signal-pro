@@ -14,8 +14,10 @@ def calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
     loss = -delta.clip(upper=0)
     avg_gain = gain.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
     avg_loss = loss.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+    
     rs = avg_gain / avg_loss.replace(0, np.nan)
-    rsi = 100 - (100 / (1 + rs))
+    rsi = 100.0 - (100.0 / (1.0 + rs))
+    rsi = rsi.where(avg_loss != 0, np.where(avg_gain > 0, 100.0, 50.0))
     return rsi.fillna(50.0)
 
 def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
@@ -64,8 +66,8 @@ def calculate_supertrend(df: pd.DataFrame, period: int = 10, multiplier: float =
     if n > 0:
         f_upper[0] = b_upper[0]
         f_lower[0] = b_lower[0]
-        st[0] = f_upper[0]
         dirs[0] = 1
+        st[0] = f_lower[0]
         
         for i in range(1, n):
             if b_upper[i] < f_upper[i-1] or close[i-1] > f_upper[i-1]:

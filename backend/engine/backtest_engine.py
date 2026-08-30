@@ -209,9 +209,9 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
             signals_triggered.append(('rsi_divergence', 'SHORT', curr_price))
 
         # --- F. EMA Ribbon ---
-        ema20 = float(curr_bar['ema20']) if 'ema20' in curr_bar and not np.isnan(curr_bar['ema20']) else curr_price
-        ema50 = float(curr_bar['ema50']) if 'ema50' in curr_bar and not np.isnan(curr_bar['ema50']) else curr_price
-        ema200 = float(curr_bar['ema200']) if 'ema200' in curr_bar and not np.isnan(curr_bar['ema200']) else curr_price
+        ema20 = float(curr_bar['ema_20']) if 'ema_20' in curr_bar and not np.isnan(curr_bar['ema_20']) else curr_price
+        ema50 = float(curr_bar['ema_50']) if 'ema_50' in curr_bar and not np.isnan(curr_bar['ema_50']) else curr_price
+        ema200 = float(curr_bar['ema_200']) if 'ema_200' in curr_bar and not np.isnan(curr_bar['ema_200']) else curr_price
         
         if curr_price > ema20 > ema50 > ema200:
             signals_triggered.append(('ema_ribbon', 'LONG', curr_price))

@@ -494,7 +494,7 @@ def detect_chart_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
         range_high = float(df['high'].iloc[-look:-5].max())
         range_low = float(df['low'].iloc[-look:-5].min())
         range_height = range_high - range_low
-        start_idx = n - look - 5
+        start_idx = max(0, n - look)
 
         # A. Range Ust Kirilimi
         if current_price >= range_high * 0.997 and df['low'].iloc[-4:].min() <= range_high + 0.3 * current_atr:

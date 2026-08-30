@@ -85,8 +85,8 @@ def send_retest_alert(coin_data: Dict[str, Any], strategy_type: str = "PDH_PDL")
     _raw_level = coin_data.get("breakout_level") or coin_data.get("pdh") or coin_data.get("pdl") or coin_data.get("swing_level", 0.0)
     level_price = float(_raw_level) if _raw_level is not None else 0.0
     curr_price = float(coin_data.get("current_price") or 0.0)
-    retest_bar = coin_data.get("retest_bar", {})
-    retest_time = retest_bar.get("time_str", "Şimdi")
+    retest_bar = coin_data.get("retest_bar") or {}
+    retest_time = retest_bar.get("time_str", "Şimdi") if isinstance(retest_bar, dict) else "Şimdi"
 
     dir_icon = "🟢" if direction == "LONG" else "🔴"
     strat_name_detail = coin_data.get("strategy_name", "Teknik Formasyon")
@@ -146,8 +146,8 @@ def send_confirmed_alert(coin_data: Dict[str, Any], strategy_type: str = "PDH_PD
     stop_loss = float(coin_data.get("stop_loss") or 0.0)
     take_profit = float(coin_data.get("take_profit") or coin_data.get("tp1") or 0.0)
     rr = coin_data.get("risk_reward", "1:2.0+")
-    conf_bar = coin_data.get("confirmed_bar", {})
-    conf_time = conf_bar.get("time_str", "Şimdi")
+    conf_bar = coin_data.get("confirmed_bar") or {}
+    conf_time = conf_bar.get("time_str", "Şimdi") if isinstance(conf_bar, dict) else "Şimdi"
     strat_name_detail = coin_data.get("strategy_name", "Teknik Formasyon")
 
     dir_icon = "🟢" if direction == "LONG" else "🔴"

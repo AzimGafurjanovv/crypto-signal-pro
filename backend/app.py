@@ -617,7 +617,7 @@ async def run_ai_analysis(symbol: str, req: AIAnalyzeRequest):
     if not setup:
         setup = build_raw_setup_fallback(clean_sym, df, timeframe=req.timeframe)
 
-    result = analyze_with_gemini(clean_sym, setup, df, user_api_key=req.api_key)
+    result = await asyncio.to_thread(analyze_with_gemini, clean_sym, setup, df, user_api_key=req.api_key)
     return sanitize_json(result)
 
 class AIChatRequest(BaseModel):
@@ -657,7 +657,8 @@ async def get_ai_models(api_key: Optional[str] = None):
 @app.post("/api/ai-chat")
 async def run_ai_chat(req: AIChatRequest):
     """Kullanıcının düzenlediği prompt ve mesajları seçtiği Gemini modeline ileten çok turlu interaktif chat endpoint'i."""
-    result = chat_with_gemini(
+    result = await asyncio.to_thread(
+        chat_with_gemini,
         message=req.message,
         history=req.history,
         preferred_model=req.model_name or "gemini-2.0-flash",

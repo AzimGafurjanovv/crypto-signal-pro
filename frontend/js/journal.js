@@ -17,6 +17,7 @@ const DEFAULT_TOP_PAIRS = [
 
 document.addEventListener('DOMContentLoaded', () => {
     lucide.createIcons();
+    initFlatpickrInstances();
     initJournalPage();
 });
 
@@ -419,10 +420,83 @@ function renderJournalTable() {
     lucide.createIcons();
 }
 
+
+let fpEntryDate = null;
+let fpExitDate = null;
+let fpNoteDate = null;
+
+function initFlatpickrInstances() {
+    if (typeof flatpickr === 'undefined') return;
+
+    const commonConfig = {
+        enableTime: true,
+        time_24hr: true,
+        dateFormat: "Y-m-d H:i",
+        theme: "dark",
+        disableMobile: "true"
+    };
+
+    try {
+        if (flatpickr.l10ns && flatpickr.l10ns.tr) {
+            commonConfig.locale = flatpickr.l10ns.tr;
+        }
+    } catch(e) {}
+
+    const elEntry = document.getElementById('tradeFormEntryDate');
+    if (elEntry) {
+        fpEntryDate = flatpickr(elEntry, {
+            ...commonConfig,
+            defaultDate: new Date()
+        });
+    }
+
+    const elExit = document.getElementById('tradeFormExitDate');
+    if (elExit) {
+        fpExitDate = flatpickr(elExit, {
+            ...commonConfig,
+            defaultDate: null
+        });
+    }
+
+    const elNote = document.getElementById('noteFormDate');
+    if (elNote) {
+        fpNoteDate = flatpickr(elNote, {
+            ...commonConfig,
+            defaultDate: new Date()
+        });
+    }
+}
+
+function setQuickDate(daysAgo, inputId) {
+    const d = new Date();
+    d.setDate(d.getDate() - daysAgo);
+    
+    const pad = n => String(n).padStart(2, '0');
+    const formatted = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+    const input = document.getElementById(inputId);
+    if (input) {
+        input.value = formatted;
+        if (input._flatpickr) {
+            input._flatpickr.setDate(d, true);
+        }
+    }
+}
+
+function clearDateField(inputId) {
+    const input = document.getElementById(inputId);
+    if (input) {
+        input.value = '';
+        if (input._flatpickr) {
+            input._flatpickr.clear();
+        }
+    }
+}
+
 function getNowLocalDateTimeString() {
     const now = new Date();
     const pad = n => String(n).padStart(2, '0');
-    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 }
 
 function formatDateForDisplay(dtStr) {
@@ -430,22 +504,19 @@ function formatDateForDisplay(dtStr) {
     return dtStr.replace('T', ' ').slice(0, 16);
 }
 
-function formatIsoToInput(dtStr) {
-    if (!dtStr) return '';
-    return dtStr.replace(' ', 'T').slice(0, 16);
-}
 
 function openNewTradeModal() {
     document.getElementById('tradeFormId').value = '';
     document.getElementById('tradeModalTitle').textContent = 'Yeni İşlem Kaydı Ekle';
     document.getElementById('tradeForm').reset();
     document.getElementById('tradeLivePriceText').textContent = '';
-    document.getElementById('tradeFormEntryDate').value = getNowLocalDateTimeString();
-    document.getElementById('tradeFormExitDate').value = '';
+    
+    setQuickDate(0, 'tradeFormEntryDate');
+    clearDateField('tradeFormExitDate');
+    
     document.getElementById('tradeModal').classList.remove('hidden');
     document.getElementById('tradeModal').classList.add('flex');
 
-    // Varsayılan olarak ilk pariteyi seç
     if (availablePairs.length > 0) {
         selectSymbol('BTC/USDT', 'trade');
     }
@@ -467,10 +538,24 @@ function openEditTradeModal(tradeId) {
     document.getElementById('tradeFormExit').value = trade.exit_price || '';
     document.getElementById('tradeFormStrategy').value = trade.strategy || 'Kişisel Analiz';
     document.getElementById('tradeFormNotes').value = trade.notes || '';
-    document.getElementById('tradeFormEntryDate').value = formatIsoToInput(trade.entry_date_str) || getNowLocalDateTimeString();
-    document.getElementById('tradeFormExitDate').value = formatIsoToInput(trade.exit_date_str) || '';
-    document.getElementById('tradeLivePriceText').textContent = '';
+    
+    if (trade.entry_date_str) {
+        const inp = document.getElementById('tradeFormEntryDate');
+        inp.value = trade.entry_date_str;
+        if (inp._flatpickr) inp._flatpickr.setDate(trade.entry_date_str, true);
+    } else {
+        setQuickDate(0, 'tradeFormEntryDate');
+    }
 
+    if (trade.exit_date_str) {
+        const inp = document.getElementById('tradeFormExitDate');
+        inp.value = trade.exit_date_str;
+        if (inp._flatpickr) inp._flatpickr.setDate(trade.exit_date_str, true);
+    } else {
+        clearDateField('tradeFormExitDate');
+    }
+
+    document.getElementById('tradeLivePriceText').textContent = '';
     document.getElementById('tradeModal').classList.remove('hidden');
     document.getElementById('tradeModal').classList.add('flex');
 }
@@ -726,8 +811,7 @@ function openNewNoteModal() {
     document.getElementById('noteFormId').value = '';
     document.getElementById('noteForm').reset();
     document.getElementById('noteLivePriceText').textContent = '';
-    const dateInput = document.getElementById('noteFormDate');
-    if (dateInput) dateInput.value = getNowLocalDateTimeString();
+    setQuickDate(0, 'noteFormDate');
     document.getElementById('noteModal').classList.remove('hidden');
     document.getElementById('noteModal').classList.add('flex');
 

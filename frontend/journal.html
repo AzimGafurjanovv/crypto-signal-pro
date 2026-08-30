@@ -10,6 +10,11 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- TradingView Lightweight Charts v4 -->
     <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+    <!-- Flatpickr (Modern Dark Date & Time Picker) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://npmcdn.com/flatpickr/dist/l10n/tr.js"></script>
     <!-- Custom CSS -->
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
@@ -345,12 +350,37 @@
 
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-gray-400 font-medium mb-1">📅 Giriş Tarihi & Saati</label>
-                        <input id="tradeFormEntryDate" type="datetime-local" required class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-indigo-500">
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="text-gray-400 font-medium">📅 Giriş Tarihi & Saati</label>
+                        </div>
+                        <div class="relative">
+                            <input id="tradeFormEntryDate" type="text" placeholder="Tıkla ve Takvimden Seç..." required class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-9 pr-3 py-2 text-white font-mono focus:outline-none focus:border-indigo-500 cursor-pointer">
+                            <i data-lucide="calendar" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-indigo-400 pointer-events-none"></i>
+                        </div>
+                        <!-- Hızlı Tarih Butonları -->
+                        <div class="flex items-center gap-1 overflow-x-auto py-1 mt-1 text-[10px] font-mono">
+                            <span class="text-gray-500 font-sans text-[9px] shrink-0">Hızlı:</span>
+                            <button type="button" onclick="setQuickDate(0, 'tradeFormEntryDate')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">Şimdi</button>
+                            <button type="button" onclick="setQuickDate(1, 'tradeFormEntryDate')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">Dün</button>
+                            <button type="button" onclick="setQuickDate(2, 'tradeFormEntryDate')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">2 Gün Önce</button>
+                            <button type="button" onclick="setQuickDate(7, 'tradeFormEntryDate')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">1 Hafta</button>
+                        </div>
                     </div>
                     <div>
-                        <label class="block text-gray-400 font-medium mb-1">🏁 Çıkış Tarihi & Saati (Opsiyonel)</label>
-                        <input id="tradeFormExitDate" type="datetime-local" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-indigo-500">
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="text-gray-400 font-medium">🏁 Çıkış Tarihi (Opsiyonel)</label>
+                        </div>
+                        <div class="relative">
+                            <input id="tradeFormExitDate" type="text" placeholder="Kapandıysa seçiniz..." class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-9 pr-3 py-2 text-white font-mono focus:outline-none focus:border-indigo-500 cursor-pointer">
+                            <i data-lucide="clock" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-cyan-400 pointer-events-none"></i>
+                        </div>
+                        <!-- Hızlı Tarih Butonları -->
+                        <div class="flex items-center gap-1 overflow-x-auto py-1 mt-1 text-[10px] font-mono">
+                            <span class="text-gray-500 font-sans text-[9px] shrink-0">Hızlı:</span>
+                            <button type="button" onclick="setQuickDate(0, 'tradeFormExitDate')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">Şimdi</button>
+                            <button type="button" onclick="setQuickDate(1, 'tradeFormExitDate')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">Dün</button>
+                            <button type="button" onclick="clearDateField('tradeFormExitDate')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-rose-500 hover:text-rose-300 text-gray-400 transition">Temizle</button>
+                        </div>
                     </div>
                 </div>
 
@@ -437,7 +467,15 @@
                     </div>
                     <div>
                         <label class="block text-gray-400 font-medium mb-1">📅 Not Tarihi & Saati</label>
-                        <input id="noteFormDate" type="datetime-local" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500">
+                        <div class="relative">
+                            <input id="noteFormDate" type="text" placeholder="Tıkla ve Takvimden Seç..." class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-9 pr-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500 cursor-pointer">
+                            <i data-lucide="calendar" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-amber-400 pointer-events-none"></i>
+                        </div>
+                        <div class="flex items-center gap-1 overflow-x-auto py-1 mt-1 text-[10px] font-mono">
+                            <span class="text-gray-500 font-sans text-[9px] shrink-0">Hızlı:</span>
+                            <button type="button" onclick="setQuickDate(0, 'noteFormDate')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-amber-500 hover:text-amber-300 text-gray-300 transition">Şimdi</button>
+                            <button type="button" onclick="setQuickDate(1, 'noteFormDate')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-amber-500 hover:text-amber-300 text-gray-300 transition">Dün</button>
+                        </div>
                     </div>
                 </div>
 

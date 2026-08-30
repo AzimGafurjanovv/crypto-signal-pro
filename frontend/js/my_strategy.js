@@ -6,6 +6,7 @@ let radarChartInstance = null;
 let autoRefreshTimer = null;
 let autoRefreshCountdown = 30;
 let isFetchingInProgress = false;
+let currentFetchId = 0;
 
 document.addEventListener('DOMContentLoaded', () => {
     lucide.createIcons();

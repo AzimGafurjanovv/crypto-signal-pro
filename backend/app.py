@@ -822,6 +822,7 @@ class TradeNoteItemRequest(BaseModel):
     note_title: Optional[str] = "Özel Hedef Takibi"
     note_text: Optional[str] = ""
     telegram_notify: Optional[bool] = True
+    created_at_str: Optional[str] = None
 
 @app.get("/journal")
 @app.get("/journal.html")

@@ -98,6 +98,14 @@ class TradeJournalManager:
             if position_size > 0:
                 pnl_amount = round(position_size * (pnl_percent / 100.0), 2)
 
+        if trade_data.get("entry_date_str"):
+            try:
+                clean_ds = str(trade_data["entry_date_str"]).replace("T", " ").strip()
+                dt = datetime.strptime(clean_ds[:16], "%Y-%m-%d %H:%M")
+                now = dt.timestamp()
+            except Exception:
+                pass
+
         new_trade = {
             "id": trade_id,
             "symbol": trade_data.get("symbol", "BTC/USDT").upper().strip(),
@@ -116,7 +124,7 @@ class TradeJournalManager:
             "entry_date_str": trade_data.get("entry_date_str") or datetime.now().strftime("%Y-%m-%d %H:%M"),
             "exit_date_str": trade_data.get("exit_date_str"),
             "created_at": now,
-            "updated_at": now
+            "updated_at": time.time()
         }
 
         self.trades.append(new_trade)
@@ -129,6 +137,14 @@ class TradeJournalManager:
                 for k, v in updates.items():
                     if k != "id":
                         trade[k] = v
+
+                if updates.get("entry_date_str"):
+                    try:
+                        clean_ds = str(updates["entry_date_str"]).replace("T", " ").strip()
+                        dt = datetime.strptime(clean_ds[:16], "%Y-%m-%d %H:%M")
+                        trade["created_at"] = dt.timestamp()
+                    except Exception:
+                        pass
                 
                 # PnL'i güncelle
                 entry_price = float(trade.get("entry_price", 0.0))
@@ -270,6 +286,18 @@ class TradeNotesAlertManager:
             else:
                 condition_type = "CROSS_BELOW"
 
+        created_at_str = note_data.get("created_at_str")
+        if created_at_str:
+            try:
+                clean_ds = str(created_at_str).replace("T", " ").strip()
+                dt = datetime.strptime(clean_ds[:16], "%Y-%m-%d %H:%M")
+                now = dt.timestamp()
+                created_at_str = clean_ds[:16]
+            except Exception:
+                created_at_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+        else:
+            created_at_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+
         new_note = {
             "id": note_id,
             "symbol": symbol,
@@ -285,7 +313,7 @@ class TradeNotesAlertManager:
             "triggered_at": None,
             "triggered_price": None,
             "created_at": now,
-            "created_at_str": datetime.now().strftime("%Y-%m-%d %H:%M")
+            "created_at_str": created_at_str
         }
 
         self.notes.append(new_note)

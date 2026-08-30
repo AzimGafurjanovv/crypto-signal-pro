@@ -726,6 +726,8 @@ function openNewNoteModal() {
     document.getElementById('noteFormId').value = '';
     document.getElementById('noteForm').reset();
     document.getElementById('noteLivePriceText').textContent = '';
+    const dateInput = document.getElementById('noteFormDate');
+    if (dateInput) dateInput.value = getNowLocalDateTimeString();
     document.getElementById('noteModal').classList.remove('hidden');
     document.getElementById('noteModal').classList.add('flex');
 
@@ -741,6 +743,7 @@ function closeNoteModal() {
 
 async function handleNoteFormSubmit(e) {
     e.preventDefault();
+    const dateInput = document.getElementById('noteFormDate')?.value;
     const payload = {
         symbol: document.getElementById('noteFormSymbol').value.toUpperCase().trim(),
         direction_bias: document.getElementById('noteFormDirection').value,
@@ -748,7 +751,8 @@ async function handleNoteFormSubmit(e) {
         condition_type: document.getElementById('noteFormCondition').value,
         note_title: document.getElementById('noteFormTitle').value,
         note_text: document.getElementById('noteFormText').value,
-        telegram_notify: document.getElementById('noteFormTelegram').checked
+        telegram_notify: document.getElementById('noteFormTelegram').checked,
+        created_at_str: formatDateForDisplay(dateInput) || new Date().toISOString().slice(0, 16).replace('T', ' ')
     };
 
     try {

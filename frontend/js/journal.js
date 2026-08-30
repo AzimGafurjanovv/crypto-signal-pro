@@ -325,13 +325,22 @@ function updateDepositUsageHint() {
     const lev = Math.max(1, parseInt(document.getElementById('tradeFormLeverage').value) || 1);
     const totalSize = parseFloat(document.getElementById('tradeFormSize').value) || (margin * lev);
     const initDeposit = currentStats.initial_deposit || 1000.0;
+    const defaultFeeRate = currentStats.default_fee_pct !== undefined ? currentStats.default_fee_pct : 0.05;
+
+    // Otomatik komisyon hesapla (Giriş + Çıkış = 2 işlem)
+    const feeInput = document.getElementById('tradeFormFee');
+    if (feeInput && !feeInput.dataset.manual) {
+        const estFee = (totalSize * (defaultFeeRate / 100.0) * 2).toFixed(2);
+        feeInput.value = estFee;
+    }
 
     const badge = document.getElementById('tradeDepositUsageBadge');
     if (!badge) return;
 
     if (margin > 0) {
         const riskPct = ((margin / initDeposit) * 100.0).toFixed(1);
-        badge.textContent = `Kasaya Oranı: %${riskPct} ($${margin}) | ${lev}x | Pozisyon: $${totalSize}`;
+        const curFee = feeInput ? feeInput.value : '0.00';
+        badge.textContent = `Kasa Payı: %${riskPct} ($${margin}) | ${lev}x | Poz: $${totalSize} | Kom: $${curFee}`;
     } else {
         badge.textContent = '';
     }
@@ -343,7 +352,10 @@ function updateDepositUsageHint() {
 
 function openDepositModal() {
     const initDep = currentStats.initial_deposit || 1000;
+    const defFee = currentStats.default_fee_pct !== undefined ? currentStats.default_fee_pct : 0.05;
     document.getElementById('depositInput').value = initDep;
+    const feeInp = document.getElementById('defaultFeeInput');
+    if (feeInp) feeInp.value = defFee;
     document.getElementById('depositModal').classList.remove('hidden');
     document.getElementById('depositModal').classList.add('flex');
 }
@@ -360,12 +372,13 @@ function setDepositValue(val) {
 async function handleDepositFormSubmit(e) {
     e.preventDefault();
     const newDeposit = parseFloat(document.getElementById('depositInput').value) || 1000;
+    const newFee = parseFloat(document.getElementById('defaultFeeInput')?.value) || 0.05;
 
     try {
         const res = await fetch('/api/journal/deposit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deposit: newDeposit })
+            body: JSON.stringify({ deposit: newDeposit, default_fee_pct: newFee })
         });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         
@@ -432,7 +445,13 @@ function renderJournalStats(s) {
     if (openTradesHint) openTradesHint.textContent = `${s.open_trades || 0} Açık Pozisyon`;
     if (winRateEl) winRateEl.textContent = `%${(s.win_rate || 0).toFixed(1)}`;
     if (winCountEl) winCountEl.textContent = `${s.winning_trades || 0} Kazanç / ${s.losing_trades || 0} Kayıp`;
-    if (avgLevEl) avgLevEl.textContent = `${s.avg_leverage || 1}x`;
+    
+    const feesEl = document.getElementById('statTotalFees');
+    if (feesEl) {
+        const feeTotal = s.total_fees_paid || 0;
+        feesEl.textContent = `-$${feeTotal.toFixed(2)}`;
+    }
+    if (avgLevEl) avgLevEl.textContent = `${s.avg_leverage || 1.0}x Ort. Kaldıraç`;
     if (avgRREl) avgRREl.textContent = `${s.avg_rr || 0} R Ortalama`;
     if (pfEl) pfEl.textContent = (s.profit_factor || 0).toFixed(2);
 }
@@ -532,8 +551,8 @@ function renderJournalTable(trades) {
                     <div class="text-white">${t.exit_price ? '$' + t.exit_price : '<span class="text-gray-600">-</span>'}</div>
                 </td>
                 <td class="p-3.5">
-                    <div class="${pnlColor}">${sign}$${pnlAmt.toFixed(2)}</div>
-                    <div class="text-[10px] ${pnlColor}">${sign}%${pnlPct.toFixed(1)} ROE</div>
+                    <div class="${pnlColor}">${sign}$${pnlAmt.toFixed(2)} <span class="text-[9px] text-gray-500 font-sans">(-$${(t.fee || 0).toFixed(2)})</span></div>
+                    <div class="text-[10px] ${pnlColor}">${sign}%${pnlPct.toFixed(1)} Net ROE</div>
                 </td>
                 <td class="p-3.5">${statusBadge}</td>
                 <td class="p-3.5 font-sans">
@@ -597,6 +616,7 @@ function renderJournalTable(trades) {
                         <div>
                             <span class="text-gray-500 block text-[9px]">NET KÂR / ROE:</span>
                             <span class="${pnlColor} font-bold text-xs">${sign}$${pnlAmt.toFixed(2)} (${sign}%${pnlPct.toFixed(1)})</span>
+                            <span class="text-[9px] text-gray-500 block">Kom: -$${(t.fee || 0).toFixed(2)}</span>
                         </div>
                         <div>
                             <span class="text-gray-500 block text-[9px]">STOP LOSS:</span>
@@ -838,6 +858,11 @@ function openNewTradeModal() {
     document.getElementById('tradeFormLeverage').value = '1';
     document.getElementById('tradeFormMargin').value = '';
     document.getElementById('tradeFormSize').value = '';
+    const feeInp = document.getElementById('tradeFormFee');
+    if (feeInp) {
+        feeInp.value = '';
+        delete feeInp.dataset.manual;
+    }
     
     setQuickDate(0, 'tradeFormEntryDate');
     clearDateField('tradeFormExitDate');
@@ -862,6 +887,11 @@ function openEditTradeModal(tradeId) {
     document.getElementById('tradeFormLeverage').value = trade.leverage || 1;
     document.getElementById('tradeFormMargin').value = trade.margin || '';
     document.getElementById('tradeFormSize').value = trade.position_size || '';
+    const feeInp = document.getElementById('tradeFormFee');
+    if (feeInp) {
+        feeInp.value = trade.fee !== undefined ? trade.fee : '';
+        feeInp.dataset.manual = 'true';
+    }
     document.getElementById('tradeFormEntry').value = trade.entry_price || '';
     document.getElementById('tradeFormStopLoss').value = trade.stop_loss || '';
     document.getElementById('tradeFormTarget').value = trade.target_price || '';
@@ -904,12 +934,14 @@ async function handleTradeFormSubmit(e) {
     const entryDateInput = document.getElementById('tradeFormEntryDate').value;
     const exitDateInput = document.getElementById('tradeFormExitDate').value;
 
+    const feeVal = document.getElementById('tradeFormFee')?.value;
     const payload = {
         symbol: document.getElementById('tradeFormSymbol').value.toUpperCase().trim(),
         direction: document.getElementById('tradeFormDirection').value,
         leverage: parseInt(document.getElementById('tradeFormLeverage').value) || 1,
         margin: parseFloat(document.getElementById('tradeFormMargin').value) || 0,
         position_size: parseFloat(document.getElementById('tradeFormSize').value) || 0,
+        fee: feeVal !== undefined && feeVal !== '' ? parseFloat(feeVal) : null,
         entry_price: parseFloat(document.getElementById('tradeFormEntry').value) || 0,
         stop_loss: parseFloat(document.getElementById('tradeFormStopLoss').value) || 0,
         target_price: parseFloat(document.getElementById('tradeFormTarget').value) || 0,

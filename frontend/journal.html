@@ -113,11 +113,11 @@
                     <div id="statOpenTradesHint" class="text-[9px] text-cyan-400 font-sans">0 Açık Pozisyon</div>
                 </div>
 
-                <!-- 5. Ortalama Kaldıraç & R:R -->
-                <div class="glass-panel p-3.5 rounded-2xl border border-purple-500/30 text-center">
-                    <div class="text-[10px] text-purple-300 font-sans">ORT. KALDIRAÇ / R:R</div>
-                    <div id="statAvgLeverage" class="text-xl sm:text-2xl font-black text-purple-400 font-mono mt-0.5">1x</div>
-                    <div id="statAvgRR" class="text-[9px] text-purple-400/70 font-sans">0.0 R Ortalama</div>
+                <!-- 5. Ödenen Komisyon & Ortalama Kaldıraç -->
+                <div class="glass-panel p-3.5 rounded-2xl border border-rose-500/30 text-center">
+                    <div class="text-[10px] text-rose-300 font-sans">ÖDENEN KOMİSYON</div>
+                    <div id="statTotalFees" class="text-xl sm:text-2xl font-black text-rose-400 font-mono mt-0.5">$0.00</div>
+                    <div id="statAvgLeverage" class="text-[9px] text-gray-400 font-mono">1.0x Ort. Kaldıraç</div>
                 </div>
 
                 <!-- 6. Kâr Faktörü -->
@@ -378,26 +378,33 @@
                         <span id="tradeDepositUsageBadge" class="text-[10px] font-mono text-indigo-400 font-bold"></span>
                     </div>
 
-                    <div class="grid grid-cols-3 gap-2.5">
+                    <div class="grid grid-cols-4 gap-2">
                         <!-- Kaldıraç -->
                         <div>
-                            <label class="block text-gray-400 font-medium mb-1">Kaldıraç</label>
-                            <div class="flex items-center gap-1">
-                                <input id="tradeFormLeverage" type="number" min="1" max="125" value="1" oninput="onLeverageOrMarginChange()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-1.5 text-white font-mono font-bold text-center focus:outline-none focus:border-indigo-500">
-                                <span class="text-gray-400 font-bold font-mono">x</span>
+                            <label class="block text-gray-400 font-medium mb-1 text-[10px]">Kaldıraç</label>
+                            <div class="flex items-center gap-0.5">
+                                <input id="tradeFormLeverage" type="number" min="1" max="125" value="1" oninput="onLeverageOrMarginChange()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-2 py-1.5 text-white font-mono font-bold text-center focus:outline-none focus:border-indigo-500 text-xs">
+                                <span class="text-gray-400 font-bold font-mono text-[11px]">x</span>
                             </div>
                         </div>
 
                         <!-- Marjin ($) -->
                         <div>
-                            <label class="block text-gray-400 font-medium mb-1">Marjin ($)</label>
-                            <input id="tradeFormMargin" type="number" step="any" placeholder="100" oninput="onMarginInputChange()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-1.5 text-cyan-400 font-mono font-bold focus:outline-none focus:border-indigo-500">
+                            <label class="block text-gray-400 font-medium mb-1 text-[10px]">Marjin ($)</label>
+                            <input id="tradeFormMargin" type="number" step="any" placeholder="100" oninput="onMarginInputChange()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-2 py-1.5 text-cyan-400 font-mono font-bold focus:outline-none focus:border-indigo-500 text-xs">
                         </div>
 
                         <!-- Toplam Pozisyon ($) -->
                         <div>
-                            <label class="block text-gray-400 font-medium mb-1">Toplam Pozisyon ($)</label>
-                            <input id="tradeFormSize" type="number" step="any" placeholder="100" oninput="onPositionSizeInputChange()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-1.5 text-white font-mono font-bold focus:outline-none focus:border-indigo-500">
+                            <label class="block text-gray-400 font-medium mb-1 text-[10px]">Pozisyon ($)</label>
+                            <input id="tradeFormSize" type="number" step="any" placeholder="100" oninput="onPositionSizeInputChange()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-2 py-1.5 text-white font-mono font-bold focus:outline-none focus:border-indigo-500 text-xs">
+                        </div>
+
+                        <!-- 💸 Komisyon ($) -->
+                        <div>
+                            <label class="block text-rose-300 font-medium mb-1 text-[10px]">Komisyon ($)</label>
+                            <input id="tradeFormFee" type="number" step="any" placeholder="0.10" class="w-full bg-gray-950 border border-rose-500/40 rounded-xl px-2 py-1.5 text-rose-400 font-mono font-bold focus:outline-none focus:border-rose-500 text-xs">
+                            <input type="hidden" id="tradeFormFeeRate" value="0.05">
                         </div>
                     </div>
 
@@ -632,6 +639,12 @@
                     <label class="block text-gray-400 font-medium mb-1">💰 Başlangıç Sermayesi / Kasa ($)</label>
                     <input id="depositInput" type="number" step="any" min="1" placeholder="1000" required class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-emerald-400 font-mono font-bold text-base focus:outline-none focus:border-indigo-500">
                     <p class="text-[10px] text-gray-500 mt-1">Kasa büyümesi ve marjin oranları bu depozito miktarına göre hesaplanır.</p>
+                </div>
+
+                <div>
+                    <label class="block text-gray-400 font-medium mb-1">💸 Varsayılan Komisyon Oranı (%)</label>
+                    <input id="defaultFeeInput" type="number" step="0.01" min="0" placeholder="0.05" value="0.05" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-rose-400 font-mono font-bold text-xs focus:outline-none focus:border-indigo-500">
+                    <p class="text-[10px] text-gray-500 mt-1">Vadeli (Futures) için genellikle %0.04 - %0.06, Spot için %0.10'dur.</p>
                 </div>
 
                 <div class="flex items-center gap-1.5 overflow-x-auto text-[10px] font-mono">

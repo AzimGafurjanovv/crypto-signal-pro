@@ -805,6 +805,8 @@ class TradeJournalItemRequest(BaseModel):
     leverage: Optional[int] = 1
     margin: Optional[float] = 0.0
     position_size: Optional[float] = 0.0
+    fee: Optional[float] = None
+    fee_rate_pct: Optional[float] = 0.05
     entry_price: float
     target_price: Optional[float] = 0.0
     stop_loss: Optional[float] = 0.0
@@ -817,6 +819,7 @@ class TradeJournalItemRequest(BaseModel):
 
 class JournalDepositRequest(BaseModel):
     deposit: float
+    default_fee_pct: Optional[float] = None
 
 class TradeNoteItemRequest(BaseModel):
     symbol: str
@@ -847,8 +850,8 @@ async def get_journal_stats():
 
 @app.post("/api/journal/deposit")
 async def set_journal_deposit(req: JournalDepositRequest):
-    updated = trade_journal_manager.update_initial_deposit(req.deposit)
-    return sanitize_json({"status": "success", "settings": updated, "message": "Kasa / Başlangıç depozitosu güncellendi."})
+    updated = trade_journal_manager.update_initial_deposit(req.deposit, req.default_fee_pct)
+    return sanitize_json({"status": "success", "settings": updated, "message": "Kasa / Başlangıç depozitosu ve varsayılan komisyon güncellendi."})
 
 @app.post("/api/journal")
 async def add_journal_trade(req: TradeJournalItemRequest):

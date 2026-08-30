@@ -1,5 +1,5 @@
 """
-CryptoSignalPro AI - Trade Günlüğü & Trade Notları ve Fiyat Alarmı Servisi (v2.0.0)
+CryptoSignalPro AI - Trade Günlüğü & Trade Notları ve Fiyat Alarmı Servisi (v2.1.0)
 
 Gelişmiş Yetenekler:
 1. Depozito & Kasa / Bakiye Takibi:
@@ -8,10 +8,13 @@ Gelişmiş Yetenekler:
 2. Kaldıraç & Marjin Sistemi (Leverage & Margin):
    - Spot (1x) veya Vadeli (2x - 100x) kaldıraç desteği.
    - Kullanılan marjin ($) ve Toplam pozisyon büyüklüğü ($ = Marjin x Kaldıraç).
-   - Kaldıraçlı Özkaynak Getirisi (Leveraged ROE %) ve Net Dolar PnL hesabı.
-3. Takvim Bazlı Günlük Özeti (Daily Trading Calendar Aggregation):
-   - Gün bazlı işlem sayısı, net kâr/zarar ($), kazanma/kaybetme sayıları ve detaylı günlük karnesi.
-4. Trade Notları & 7/24 Fiyat Alarm Motoru.
+3. 💸 Otomatik & Manuel Komisyon (Trading Fee) Kesintisi:
+   - Pozisyon büyüklüğüne göre otomatik giriş + çıkış komisyonu (Örn: %0.05 Taker/Maker).
+   - Brüt Kâr/Zarar (Gross PnL) - Komisyon = Net Kâr/Zarar (Net PnL).
+   - Net ROE % ve Kasa bakiyesinden komisyonların eksiksiz düşülmesi.
+4. Takvim Bazlı Günlük Özeti (Daily Trading Calendar Aggregation):
+   - Gün bazlı net kazançlar, komisyonlar ve günlük karne.
+5. Trade Notları & 7/24 Fiyat Alarm Motoru.
 """
 
 import os
@@ -40,7 +43,7 @@ def load_journal_settings() -> Dict[str, Any]:
                 return json.load(f)
         except Exception:
             pass
-    return {"initial_deposit": 1000.0, "currency": "USDT"}
+    return {"initial_deposit": 1000.0, "default_fee_pct": 0.05, "currency": "USDT"}
 
 
 def save_journal_settings(settings: Dict[str, Any]):
@@ -78,8 +81,10 @@ class TradeJournalManager:
         except Exception as e:
             print(f"❌ Trade Journal kaydetme hatası: {e}")
 
-    def update_initial_deposit(self, deposit_amount: float) -> Dict[str, Any]:
+    def update_initial_deposit(self, deposit_amount: float, default_fee_pct: Optional[float] = None) -> Dict[str, Any]:
         self.settings["initial_deposit"] = max(1.0, float(deposit_amount))
+        if default_fee_pct is not None:
+            self.settings["default_fee_pct"] = max(0.0, float(default_fee_pct))
         save_journal_settings(self.settings)
         return self.settings
 
@@ -120,6 +125,16 @@ class TradeJournalManager:
         init_deposit = self.settings.get("initial_deposit", 1000.0)
         deposit_pct_used = round((margin / init_deposit) * 100.0, 1) if init_deposit > 0 else 0.0
 
+        # 💸 Komisyon Hesabı (Giriş + Çıkış Toplamı)
+        # Kullanıcı elle girdiyse onu al, girmediyse (Pozisyon * Komisyon Oranı * 2) hesapla
+        default_fee_rate = float(self.settings.get("default_fee_pct", 0.05))
+        fee_rate_pct = float(trade_data.get("fee_rate_pct") or default_fee_rate)
+        
+        if trade_data.get("fee") is not None and str(trade_data.get("fee")).strip() != "":
+            fee = float(trade_data.get("fee"))
+        else:
+            fee = round(position_size * (fee_rate_pct / 100.0) * 2, 2)
+
         # Otomatik Risk / Ödül Oranı
         risk_dist = abs(entry_price - stop_loss) if entry_price and stop_loss else 0.0
         reward_dist = abs(target_price - entry_price) if target_price and entry_price else 0.0
@@ -128,9 +143,10 @@ class TradeJournalManager:
         status = trade_data.get("status", "OPEN").upper()
         exit_price = float(trade_data.get("exit_price")) if trade_data.get("exit_price") else None
         
-        pnl_percent_raw = 0.0 # Ham fiyat değişimi %
-        pnl_percent_roe = 0.0 # Kaldıraçlı marjin getirisi %
-        pnl_amount = 0.0      # Net USDT kazancı/kaybı
+        pnl_percent_raw = 0.0  # Ham fiyat değişimi %
+        pnl_percent_roe = 0.0  # Kaldıraçlı marjin getirisi %
+        gross_pnl_amount = 0.0 # Brüt kâr/zarar ($)
+        net_pnl_amount = 0.0   # Komisyon düşülmüş Net kâr/zarar ($)
 
         if exit_price and exit_price > 0 and entry_price > 0:
             if direction == "LONG":
@@ -139,7 +155,16 @@ class TradeJournalManager:
                 pnl_percent_raw = round((entry_price - exit_price) / entry_price * 100.0, 2)
             
             pnl_percent_roe = round(pnl_percent_raw * leverage, 2)
-            pnl_amount = round(margin * (pnl_percent_roe / 100.0), 2)
+            gross_pnl_amount = round(margin * (pnl_percent_roe / 100.0), 2)
+            net_pnl_amount = round(gross_pnl_amount - fee, 2)
+            
+            # Net ROE %
+            if margin > 0:
+                net_pnl_percent_roe = round((net_pnl_amount / margin) * 100.0, 2)
+            else:
+                net_pnl_percent_roe = pnl_percent_roe
+        else:
+            net_pnl_percent_roe = 0.0
 
         entry_date_str = trade_data.get("entry_date_str") or datetime.now().strftime("%Y-%m-%d %H:%M")
         if trade_data.get("entry_date_str"):
@@ -159,15 +184,18 @@ class TradeJournalManager:
             "margin": margin,
             "position_size": position_size,
             "deposit_pct_used": deposit_pct_used,
+            "fee": fee,
+            "fee_rate_pct": fee_rate_pct,
             "entry_price": entry_price,
             "target_price": target_price,
             "stop_loss": stop_loss,
             "exit_price": exit_price,
             "status": status, # OPEN, WIN_TP, LOSS_SL, CLOSED, CANCELLED
             "risk_reward": rr_ratio,
-            "pnl_percent": pnl_percent_roe, # Arayüzde ROE % gösterilir
+            "gross_pnl_amount": gross_pnl_amount,
+            "pnl_amount": net_pnl_amount,     # Net Kâr/Zarar ($) (Komisyon düşülmüş)
+            "pnl_percent": net_pnl_percent_roe, # Net ROE % (Komisyon düşülmüş)
             "pnl_percent_raw": pnl_percent_raw,
-            "pnl_amount": pnl_amount,
             "strategy": trade_data.get("strategy", "Kişisel Analiz"),
             "notes": trade_data.get("notes", ""),
             "entry_date_str": entry_date_str,
@@ -211,6 +239,14 @@ class TradeJournalManager:
                 init_deposit = self.settings.get("initial_deposit", 1000.0)
                 trade["deposit_pct_used"] = round((margin / init_deposit) * 100.0, 1) if init_deposit > 0 else 0.0
 
+                # 💸 Komisyon Güncelleme
+                if "fee" in updates and updates["fee"] is not None and str(updates["fee"]).strip() != "":
+                    fee = float(updates["fee"])
+                else:
+                    fee_rate = float(trade.get("fee_rate_pct") or self.settings.get("default_fee_pct", 0.05))
+                    fee = round(position_size * (fee_rate / 100.0) * 2, 2)
+                trade["fee"] = fee
+
                 # PnL'i güncelle
                 entry_price = float(trade.get("entry_price", 0.0))
                 exit_price = float(trade.get("exit_price", 0.0)) if trade.get("exit_price") else None
@@ -223,9 +259,13 @@ class TradeJournalManager:
                         pnl_raw = round((entry_price - exit_price) / entry_price * 100.0, 2)
                     
                     pnl_roe = round(pnl_raw * leverage, 2)
+                    gross_pnl = round(margin * (pnl_roe / 100.0), 2)
+                    net_pnl = round(gross_pnl - fee, 2)
+                    
                     trade["pnl_percent_raw"] = pnl_raw
-                    trade["pnl_percent"] = pnl_roe
-                    trade["pnl_amount"] = round(margin * (pnl_roe / 100.0), 2)
+                    trade["gross_pnl_amount"] = gross_pnl
+                    trade["pnl_amount"] = net_pnl
+                    trade["pnl_percent"] = round((net_pnl / margin) * 100.0, 2) if margin > 0 else pnl_roe
                 
                 trade["updated_at"] = time.time()
                 self._save_journal()
@@ -241,21 +281,25 @@ class TradeJournalManager:
         return False
 
     def get_stats(self) -> Dict[str, Any]:
-        """Tüm işlemlerin ve takvim bazlı performans karnesini hesaplar."""
+        """Tüm işlemlerin, komisyonların ve takvim bazlı performans karnesini hesaplar."""
         total_trades = len(self.trades)
         initial_deposit = float(self.settings.get("initial_deposit", 1000.0))
+        default_fee_pct = float(self.settings.get("default_fee_pct", 0.05))
 
         if total_trades == 0:
             return {
                 "initial_deposit": initial_deposit,
                 "current_balance": initial_deposit,
                 "account_growth_pct": 0.0,
+                "default_fee_pct": default_fee_pct,
                 "total_trades": 0,
                 "open_trades": 0,
                 "closed_trades": 0,
                 "winning_trades": 0,
                 "losing_trades": 0,
                 "win_rate": 0.0,
+                "total_fees_paid": 0.0,
+                "gross_pnl_amount": 0.0,
                 "total_pnl_pct": 0.0,
                 "total_pnl_amount": 0.0,
                 "avg_rr": 0.0,
@@ -273,11 +317,15 @@ class TradeJournalManager:
         losses = [t for t in closed_trades if t.get("pnl_amount", 0.0) < 0 or t.get("status") == "LOSS_SL"]
 
         win_rate = round(len(wins) / len(closed_trades) * 100.0, 1) if closed_trades else 0.0
+        total_fees_paid = round(sum(t.get("fee", 0.0) for t in closed_trades), 2)
+        gross_pnl_amount = round(sum(t.get("gross_pnl_amount", t.get("pnl_amount", 0.0)) for t in closed_trades), 2)
         total_pnl_amount = round(sum(t.get("pnl_amount", 0.0) for t in closed_trades), 2)
         total_pnl_pct = round(sum(t.get("pnl_percent", 0.0) for t in closed_trades), 2)
+        
         avg_rr = round(sum(t.get("risk_reward", 0.0) for t in self.trades) / total_trades, 2)
         avg_leverage = round(sum(t.get("leverage", 1) for t in self.trades) / total_trades, 1)
 
+        # Net bakiye = Başlangıç Depozitosu + Net PnL (Komisyonlar otomatik düşülmüş)
         current_balance = round(initial_deposit + total_pnl_amount, 2)
         account_growth_pct = round((total_pnl_amount / initial_deposit) * 100.0, 2) if initial_deposit > 0 else 0.0
 
@@ -298,7 +346,6 @@ class TradeJournalManager:
         # -------------------------------------------------------------
         daily_calendar: Dict[str, Dict[str, Any]] = {}
         for t in self.trades:
-            # Tarih formatı: YYYY-MM-DD
             dt_str = t.get("entry_date_str") or ""
             day_key = dt_str[:10] if len(dt_str) >= 10 else datetime.fromtimestamp(t.get("created_at", time.time())).strftime("%Y-%m-%d")
 
@@ -311,6 +358,7 @@ class TradeJournalManager:
                     "open_count": 0,
                     "net_pnl_amount": 0.0,
                     "net_pnl_pct": 0.0,
+                    "total_fee": 0.0,
                     "trades": []
                 }
 
@@ -319,21 +367,20 @@ class TradeJournalManager:
             
             pnl_amt = float(t.get("pnl_amount", 0.0))
             pnl_pct = float(t.get("pnl_percent", 0.0))
+            fee_amt = float(t.get("fee", 0.0))
             status = t.get("status", "OPEN")
 
             if status == "OPEN":
                 day_obj["open_count"] += 1
-            elif pnl_amt > 0 or status == "WIN_TP":
-                day_obj["win_count"] += 1
+            else:
+                day_obj["total_fee"] = round(day_obj["total_fee"] + fee_amt, 2)
                 day_obj["net_pnl_amount"] = round(day_obj["net_pnl_amount"] + pnl_amt, 2)
                 day_obj["net_pnl_pct"] = round(day_obj["net_pnl_pct"] + pnl_pct, 2)
-            elif pnl_amt < 0 or status == "LOSS_SL":
-                day_obj["loss_count"] += 1
-                day_obj["net_pnl_amount"] = round(day_obj["net_pnl_amount"] + pnl_amt, 2)
-                day_obj["net_pnl_pct"] = round(day_obj["net_pnl_pct"] + pnl_pct, 2)
-            else: # CLOSED
-                day_obj["net_pnl_amount"] = round(day_obj["net_pnl_amount"] + pnl_amt, 2)
-                day_obj["net_pnl_pct"] = round(day_obj["net_pnl_pct"] + pnl_pct, 2)
+
+                if pnl_amt > 0 or status == "WIN_TP":
+                    day_obj["win_count"] += 1
+                elif pnl_amt < 0 or status == "LOSS_SL":
+                    day_obj["loss_count"] += 1
 
             day_obj["trades"].append({
                 "id": t.get("id"),
@@ -342,6 +389,8 @@ class TradeJournalManager:
                 "leverage": t.get("leverage", 1),
                 "margin": t.get("margin", 0.0),
                 "position_size": t.get("position_size", 0.0),
+                "fee": fee_amt,
+                "gross_pnl_amount": t.get("gross_pnl_amount", pnl_amt),
                 "pnl_amount": pnl_amt,
                 "pnl_percent": pnl_pct,
                 "status": status,
@@ -353,12 +402,15 @@ class TradeJournalManager:
             "initial_deposit": initial_deposit,
             "current_balance": current_balance,
             "account_growth_pct": account_growth_pct,
+            "default_fee_pct": default_fee_pct,
             "total_trades": total_trades,
             "open_trades": len(open_trades),
             "closed_trades": len(closed_trades),
             "winning_trades": len(wins),
             "losing_trades": len(losses),
             "win_rate": win_rate,
+            "total_fees_paid": total_fees_paid,
+            "gross_pnl_amount": gross_pnl_amount,
             "total_pnl_pct": total_pnl_pct,
             "total_pnl_amount": total_pnl_amount,
             "avg_rr": avg_rr,

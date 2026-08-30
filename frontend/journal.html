@@ -266,12 +266,27 @@
 
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-gray-400 font-medium mb-1">🪙 Parite (Symbol)</label>
-                        <input id="tradeFormSymbol" type="text" placeholder="BTC/USDT" required class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-mono uppercase focus:outline-none focus:border-indigo-500">
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="text-gray-400 font-medium">🪙 Parite (Symbol)</label>
+                            <span id="tradeLivePriceText" class="text-[10px] text-cyan-400 font-mono font-bold"></span>
+                        </div>
+                        <input id="tradeFormSymbol" list="availablePairsList" type="text" placeholder="BTC/USDT (Seç veya Yaz)" required onchange="onSymbolSelected('trade')" oninput="onSymbolInput('trade')" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-mono uppercase focus:outline-none focus:border-indigo-500">
+                        
+                        <!-- Hızlı Coin Seçim Çipleri -->
+                        <div class="flex items-center gap-1 overflow-x-auto py-1.5 mt-1 text-[10px] font-mono">
+                            <span class="text-gray-500 font-sans text-[9px] shrink-0">Hızlı:</span>
+                            <button type="button" onclick="selectSymbol('BTC/USDT', 'trade')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">BTC</button>
+                            <button type="button" onclick="selectSymbol('ETH/USDT', 'trade')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">ETH</button>
+                            <button type="button" onclick="selectSymbol('SOL/USDT', 'trade')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">SOL</button>
+                            <button type="button" onclick="selectSymbol('XRP/USDT', 'trade')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">XRP</button>
+                            <button type="button" onclick="selectSymbol('DOGE/USDT', 'trade')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">DOGE</button>
+                            <button type="button" onclick="selectSymbol('BNB/USDT', 'trade')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">BNB</button>
+                            <button type="button" onclick="selectSymbol('SUI/USDT', 'trade')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-indigo-500 hover:text-indigo-300 text-gray-300 transition">SUI</button>
+                        </div>
                     </div>
                     <div>
                         <label class="block text-gray-400 font-medium mb-1">🧭 İşlem Yönü</label>
-                        <select id="tradeFormDirection" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-indigo-500">
+                        <select id="tradeFormDirection" onchange="onDirectionChanged('trade')" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-indigo-500">
                             <option value="LONG">🟢 LONG (Alış)</option>
                             <option value="SHORT">🔴 SHORT (Satış)</option>
                         </select>
@@ -361,8 +376,23 @@
 
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-gray-400 font-medium mb-1">🪙 Takip Edilecek Coin</label>
-                        <input id="noteFormSymbol" type="text" placeholder="ETH/USDT" required class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-mono uppercase focus:outline-none focus:border-amber-500">
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="text-gray-400 font-medium">🪙 Takip Edilecek Coin</label>
+                            <span id="noteLivePriceText" class="text-[10px] text-amber-400 font-mono font-bold"></span>
+                        </div>
+                        <input id="noteFormSymbol" list="availablePairsList" type="text" placeholder="ETH/USDT (Seç veya Yaz)" required onchange="onSymbolSelected('note')" oninput="onSymbolInput('note')" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-mono uppercase focus:outline-none focus:border-amber-500">
+                        
+                        <!-- Hızlı Coin Seçim Çipleri -->
+                        <div class="flex items-center gap-1 overflow-x-auto py-1.5 mt-1 text-[10px] font-mono">
+                            <span class="text-gray-500 font-sans text-[9px] shrink-0">Hızlı:</span>
+                            <button type="button" onclick="selectSymbol('BTC/USDT', 'note')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-amber-500 hover:text-amber-300 text-gray-300 transition">BTC</button>
+                            <button type="button" onclick="selectSymbol('ETH/USDT', 'note')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-amber-500 hover:text-amber-300 text-gray-300 transition">ETH</button>
+                            <button type="button" onclick="selectSymbol('SOL/USDT', 'note')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-amber-500 hover:text-amber-300 text-gray-300 transition">SOL</button>
+                            <button type="button" onclick="selectSymbol('XRP/USDT', 'note')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-amber-500 hover:text-amber-300 text-gray-300 transition">XRP</button>
+                            <button type="button" onclick="selectSymbol('DOGE/USDT', 'note')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-amber-500 hover:text-amber-300 text-gray-300 transition">DOGE</button>
+                            <button type="button" onclick="selectSymbol('BNB/USDT', 'note')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-amber-500 hover:text-amber-300 text-gray-300 transition">BNB</button>
+                            <button type="button" onclick="selectSymbol('SUI/USDT', 'note')" class="px-2 py-0.5 rounded-lg bg-gray-950 border border-gray-800 hover:border-amber-500 hover:text-amber-300 text-gray-300 transition">SUI</button>
+                        </div>
                     </div>
                     <div>
                         <label class="block text-gray-400 font-medium mb-1">🧭 Beklenti / Yön</label>
@@ -441,11 +471,12 @@
             <span>Telegram</span>
         </button>
     </nav>
-    <div class="h-16 md:hidden"></div>
+    <!-- 📜 DİNAMİK BİNANCE COİN LİSTESİ (AUTOCOMPLETE DATALIST) -->
+    <datalist id="availablePairsList"></datalist>
 
     <!-- JavaScript Dosyaları -->
     <script src="/static/js/chart.js?v=3.2"></script>
     <script src="/static/js/telegram.js?v=3.2"></script>
-    <script src="/static/js/journal.js?v=1.0"></script>
+    <script src="/static/js/journal.js?v=1.1"></script>
 </body>
 </html>

@@ -1,10 +1,19 @@
-// CryptoSignalPro AI - Trade Günlüğü & Trade Notları ve Fiyat Alarmı Masası Frontend Mantığı (v1.0.0)
+// CryptoSignalPro AI - Trade Günlüğü & Trade Notları ve Fiyat Alarmı Masası Frontend Mantığı (v1.1.0)
 
 let currentJournalTrades = [];
 let currentTradeNotes = [];
+let availablePairs = [];
 let activeJournalStatusFilter = 'ALL';
 let activeNoteStatusFilter = 'ALL';
 let livePriceCache = {};
+
+// Popüler varsayılan Binance çiftleri (Fallback)
+const DEFAULT_TOP_PAIRS = [
+    "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "DOGE/USDT", "ADA/USDT",
+    "AVAX/USDT", "SUI/USDT", "PEPE/USDT", "NEAR/USDT", "APT/USDT", "ARB/USDT", "OP/USDT",
+    "LINK/USDT", "TIA/USDT", "FET/USDT", "RENDER/USDT", "DOT/USDT", "MATIC/USDT", "LTC/USDT",
+    "INJ/USDT", "SHIB/USDT", "TRX/USDT", "BCH/USDT", "UNI/USDT", "FIL/USDT", "KAS/USDT"
+];
 
 document.addEventListener('DOMContentLoaded', () => {
     lucide.createIcons();
@@ -13,6 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function initJournalPage() {
     await Promise.all([
+        fetchAvailablePairs(),
         fetchJournalTrades(),
         fetchJournalStats(),
         fetchTradeNotes()
@@ -20,6 +30,152 @@ async function initJournalPage() {
 
     // Her 30 saniyede bir notlardaki canlı fiyatları güncelle
     setInterval(updateLivePricesForNotes, 30000);
+}
+
+// -------------------------------------------------------------
+// 🪙 COİN VE PARİTE LİSTESİ (AUTOCOMPLETE DATALIST)
+// -------------------------------------------------------------
+async function fetchAvailablePairs() {
+    try {
+        const res = await fetch('/api/pairs');
+        if (res.ok) {
+            const data = await res.json();
+            if (data.pairs && data.pairs.length > 0) {
+                availablePairs = data.pairs;
+            } else {
+                availablePairs = DEFAULT_TOP_PAIRS;
+            }
+        } else {
+            availablePairs = DEFAULT_TOP_PAIRS;
+        }
+    } catch (e) {
+        console.warn('Pairs API fallback to default list:', e);
+        availablePairs = DEFAULT_TOP_PAIRS;
+    }
+
+    populatePairsDatalist();
+}
+
+function populatePairsDatalist() {
+    const datalist = document.getElementById('availablePairsList');
+    if (!datalist) return;
+    datalist.innerHTML = availablePairs.map(p => `<option value="${p}">`).join('');
+}
+
+// 🪙 Hızlı Çip veya Dropdown'dan Coin Seçildiğinde
+async function selectSymbol(symbol, context) {
+    if (context === 'trade') {
+        const input = document.getElementById('tradeFormSymbol');
+        if (input) input.value = symbol;
+        await fetchAndAutofillPrice(symbol, 'trade');
+    } else if (context === 'note') {
+        const input = document.getElementById('noteFormSymbol');
+        if (input) input.value = symbol;
+        await fetchAndAutofillPrice(symbol, 'note');
+    }
+}
+
+// Input alanına yazıldığında veya datalistten seçildiğinde
+let symbolDebounceTimer = null;
+function onSymbolInput(context) {
+    clearTimeout(symbolDebounceTimer);
+    symbolDebounceTimer = setTimeout(() => {
+        onSymbolSelected(context);
+    }, 400);
+}
+
+async function onSymbolSelected(context) {
+    let inputId = context === 'trade' ? 'tradeFormSymbol' : 'noteFormSymbol';
+    let input = document.getElementById(inputId);
+    if (!input) return;
+
+    let val = input.value.toUpperCase().trim();
+    if (!val) return;
+
+    // Otomatik /USDT tamamlama (örn: BTC yazılırsa BTC/USDT yapar)
+    if (!val.includes('/') && !val.endsWith('USDT')) {
+        const found = availablePairs.find(p => p.startsWith(val + '/') || p.split('/')[0] === val);
+        if (found) {
+            val = found;
+            input.value = val;
+        } else if (val.length >= 2) {
+            val = `${val}/USDT`;
+            input.value = val;
+        }
+    }
+
+    await fetchAndAutofillPrice(val, context);
+}
+
+// Seçilen coinin Binance anlık canlı fiyatını çekip ilgili kutulara otomatik doldurur
+async function fetchAndAutofillPrice(symbol, context) {
+    const cleanSym = symbol.toUpperCase().trim();
+    const livePriceEl = document.getElementById(context === 'trade' ? 'tradeLivePriceText' : 'noteLivePriceText');
+    if (livePriceEl) livePriceEl.textContent = '⏳ Fiyat çekiliyor...';
+
+    try {
+        const res = await fetch(`/api/chart-data?symbol=${encodeURIComponent(cleanSym)}&timeframe=15m&limit=2`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        
+        if (data.candles && data.candles.length > 0) {
+            const currentPrice = data.candles[data.candles.length - 1].close;
+            livePriceCache[cleanSym] = currentPrice;
+
+            if (livePriceEl) {
+                livePriceEl.textContent = `🪙 Canlı: $${formatPrice(currentPrice)}`;
+            }
+
+            if (context === 'trade') {
+                const entryInput = document.getElementById('tradeFormEntry');
+                const slInput = document.getElementById('tradeFormStopLoss');
+                const tpInput = document.getElementById('tradeFormTarget');
+                const dir = document.getElementById('tradeFormDirection')?.value || 'LONG';
+
+                // Giriş fiyatını anlık fiyatla doldur
+                if (entryInput) entryInput.value = currentPrice;
+
+                // Akıllı TP / SL önerisi hesapla (%2 Stop, %4 Hedef)
+                if (dir === 'LONG') {
+                    if (slInput) slInput.value = (currentPrice * 0.98).toFixed(currentPrice >= 1 ? 4 : 8);
+                    if (tpInput) tpInput.value = (currentPrice * 1.04).toFixed(currentPrice >= 1 ? 4 : 8);
+                } else {
+                    if (slInput) slInput.value = (currentPrice * 1.02).toFixed(currentPrice >= 1 ? 4 : 8);
+                    if (tpInput) tpInput.value = (currentPrice * 0.96).toFixed(currentPrice >= 1 ? 4 : 8);
+                }
+            } else if (context === 'note') {
+                const targetInput = document.getElementById('noteFormTarget');
+                if (targetInput && (!targetInput.value || parseFloat(targetInput.value) === 0)) {
+                    targetInput.value = currentPrice;
+                }
+            }
+        } else {
+            if (livePriceEl) livePriceEl.textContent = '';
+        }
+    } catch (e) {
+        if (livePriceEl) livePriceEl.textContent = '';
+    }
+}
+
+// Yön (LONG/SHORT) değiştiğinde TP/SL seviyelerini otomatik güncelle
+function onDirectionChanged(context) {
+    if (context === 'trade') {
+        const entryInput = document.getElementById('tradeFormEntry');
+        const slInput = document.getElementById('tradeFormStopLoss');
+        const tpInput = document.getElementById('tradeFormTarget');
+        const dir = document.getElementById('tradeFormDirection')?.value || 'LONG';
+        const entryPrice = parseFloat(entryInput?.value) || 0;
+
+        if (entryPrice > 0) {
+            if (dir === 'LONG') {
+                if (slInput) slInput.value = (entryPrice * 0.98).toFixed(entryPrice >= 1 ? 4 : 8);
+                if (tpInput) tpInput.value = (entryPrice * 1.04).toFixed(entryPrice >= 1 ? 4 : 8);
+            } else {
+                if (slInput) slInput.value = (entryPrice * 1.02).toFixed(entryPrice >= 1 ? 4 : 8);
+                if (tpInput) tpInput.value = (entryPrice * 0.96).toFixed(entryPrice >= 1 ? 4 : 8);
+            }
+        }
+    }
 }
 
 // -------------------------------------------------------------
@@ -267,8 +423,14 @@ function openNewTradeModal() {
     document.getElementById('tradeFormId').value = '';
     document.getElementById('tradeModalTitle').textContent = 'Yeni İşlem Kaydı Ekle';
     document.getElementById('tradeForm').reset();
+    document.getElementById('tradeLivePriceText').textContent = '';
     document.getElementById('tradeModal').classList.remove('hidden');
     document.getElementById('tradeModal').classList.add('flex');
+
+    // Varsayılan olarak ilk pariteyi seç
+    if (availablePairs.length > 0) {
+        selectSymbol('BTC/USDT', 'trade');
+    }
 }
 
 function openEditTradeModal(tradeId) {
@@ -287,6 +449,7 @@ function openEditTradeModal(tradeId) {
     document.getElementById('tradeFormExit').value = trade.exit_price || '';
     document.getElementById('tradeFormStrategy').value = trade.strategy || 'Kişisel Analiz';
     document.getElementById('tradeFormNotes').value = trade.notes || '';
+    document.getElementById('tradeLivePriceText').textContent = '';
 
     document.getElementById('tradeModal').classList.remove('hidden');
     document.getElementById('tradeModal').classList.add('flex');
@@ -408,7 +571,6 @@ async function updateLivePricesForNotes() {
     const activeSymbols = [...new Set(currentTradeNotes.map(n => n.symbol))];
     for (const sym of activeSymbols) {
         try {
-            // market_data API or quick proxy
             const res = await fetch(`/api/chart-data?symbol=${encodeURIComponent(sym)}&timeframe=15m&limit=2`);
             if (res.ok) {
                 const d = await res.json();
@@ -538,8 +700,13 @@ function renderTradeNotes() {
 function openNewNoteModal() {
     document.getElementById('noteFormId').value = '';
     document.getElementById('noteForm').reset();
+    document.getElementById('noteLivePriceText').textContent = '';
     document.getElementById('noteModal').classList.remove('hidden');
     document.getElementById('noteModal').classList.add('flex');
+
+    if (availablePairs.length > 0) {
+        selectSymbol('ETH/USDT', 'note');
+    }
 }
 
 function closeNoteModal() {

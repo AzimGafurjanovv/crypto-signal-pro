@@ -52,13 +52,13 @@ def generate_ai_prompt(setup: Dict[str, Any], df: Optional[pd.DataFrame] = None)
     vol_desc = f"{vol_r}x ({'Ortalamanın Üstünde — Alıcı/Satıcı ilgisi yüksek' if vol_r >= 1.0 else 'Ortalamanın Altında — Düşük hacim, sahte kırılım riski'})"
     vol_24h_chg = ind.get('volume_24h_change_pct', 0.0)
 
-    # --- SAF OHLCV MUM TABLOSU (Tam 24 Saatlik 24 Mum) ---
+    # --- SAF OHLCV MUM TABLOSU (Son 50 Mum - Daha Kapsamlı Bağlam) ---
     raw_candles_text = ""
     calculated_24h_vol_usdt = 0.0
     calculated_24h_chg = 0.0
 
     if df is not None and len(df) >= 24:
-        tail_df = df.tail(24)
+        tail_df = df.tail(50)  # 24 → 50 mum: daha geniş bağlam
         raw_rows = []
         for _, row in tail_df.iterrows():
             ts = int(row['timestamp']) if 'timestamp' in row else 0

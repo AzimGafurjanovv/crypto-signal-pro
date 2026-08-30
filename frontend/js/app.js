@@ -1,4 +1,11 @@
 // CryptoSignalPro AI Frontend Uygulama Mantığı (v5.3.0 Sağdan Açılan İnteraktif AI Chat & Model Seçimi)
+function debounce(fn, delay) {
+    let timer;
+    return function(...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delay);
+    };
+}
 let currentSetups = [];
 let selectedSetupForModal = null;
 let selectedSetupForRawModal = null;
@@ -124,11 +131,12 @@ async function updateAutoRefreshConfig(min) {
     updateCountdownDisplay();
 
     try {
-        await fetch('/api/auto-scan-config', {
+        const res = await fetch('/api/auto-scan-config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ interval_minutes: min })
         });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
     } catch (e) {
         console.error('Config sync error:', e);
     }
@@ -355,6 +363,7 @@ async function sendChatMessage() {
                 api_key: storedKey
             })
         });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
 
         const data = await res.json();
         const loader = document.getElementById('chatLoadingBubble');
@@ -519,12 +528,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 2. Min Güvenlik Slider Kaydırma (Canlı 60fps dinamik filtreleme)
     if (minConfRange) {
-        minConfRange.addEventListener('input', (e) => {
+        minConfRange.addEventListener('input', debounce((e) => {
             if (enableMinConfToggle && enableMinConfToggle.checked) {
                 minConfVal.textContent = `%${e.target.value}`;
                 applyAllFiltersAndRender();
             }
-        });
+        }, 200));
     }
 
     // 3. Sıralama Seçici (Sort By) Değişimi
@@ -716,6 +725,8 @@ function updateClock() {
  * ⚡ SUNUCU ÖNBELLEĞİNDEN ANINDA ÇEKME (0ms Gecikme & Sıfır Donma)
  */
 async function fetchLatestCachedSetups(isSilent = false) {
+    if (window._isRefreshing) return;
+    window._isRefreshing = true;
     const loadingState = document.getElementById('loadingState');
     const resultsGrid = document.getElementById('resultsGrid');
     const statsSection = document.getElementById('statsSection');
@@ -726,6 +737,7 @@ async function fetchLatestCachedSetups(isSilent = false) {
 
     try {
         const res = await fetch('/api/latest-setups');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
 
         if (data.status === 'success' && data.setups) {
@@ -745,8 +757,10 @@ async function fetchLatestCachedSetups(isSilent = false) {
             if (statsSection) statsSection.classList.remove('hidden');
             applyAllFiltersAndRender();
         }
+        window._isRefreshing = false;
     } catch (e) {
         console.error('Fetch latest cached setups error:', e);
+        window._isRefreshing = false;
     } finally {
         if (loadingState) loadingState.classList.add('hidden');
     }
@@ -909,6 +923,7 @@ async function performScan() {
                 search_symbol: searchSymbol || null
             })
         });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
 
         const data = await response.json();
 
@@ -1171,6 +1186,7 @@ async function updateRawModalPreview() {
 
     try {
         const res = await fetch(`/api/raw-data/${encodeURIComponent(symbol)}?timeframe=${timeframe}&limit=${limit}`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
 
         if (data.status === 'success' && data.raw_text) {
@@ -1352,6 +1368,7 @@ async function loadModalChartData(symbol, timeframe) {
 
     try {
         const res = await fetch(`/api/chart-data/${encodeURIComponent(symbol)}?timeframe=${timeframe}`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         const chartData = await res.json();
 
         if (chartData.status === 'success') {

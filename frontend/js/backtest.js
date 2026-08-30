@@ -129,6 +129,12 @@ async function fetchAndRenderBacktest() {
     }
 }
 
+// Equity curve chart instance
+let equityChartInstance = null;
+// State for show-all vs recent trades toggle
+let showingAllTrades = false;
+let currentStrategyForTrades = null;
+
 function renderAllResults(data) {
     const champ = data.champion_strategy || (data.leaderboard && data.leaderboard[0]);
     const leaderboard = data.leaderboard || [];
@@ -144,12 +150,15 @@ function renderAllResults(data) {
     const heroTp1 = document.getElementById('heroTp1Rate');
     const heroTp2 = document.getElementById('heroTp2Rate');
     const heroTp3 = document.getElementById('heroTp3Rate');
+    const heroSharpe = document.getElementById('heroSharpe');
+    const heroMaxConsec = document.getElementById('heroMaxConsecLoss');
 
     if (champ) {
         if (heroName) heroName.textContent = `${champ.name} (${champ.name_en || ''})`;
         if (heroCat) heroCat.textContent = `${champ.category} • Son ${data.lookback_candles || 500} Mum`;
         if (heroDesc) heroDesc.textContent = `Geçmiş ${data.lookback_candles || 500} mum boyunca en yüksek başarı oranı ve getiri sağlayan şampiyon strateji.`;
-        if (heroWin) heroWin.textContent = `%${champ.tp2_win_rate || champ.win_rate || 0}`;
+        // Fix: Use strict comparison to prevent 0 being treated as falsy
+        if (heroWin) heroWin.textContent = `%${champ.tp2_win_rate != null ? champ.tp2_win_rate : (champ.win_rate || 0)}`;
         if (heroNet) {
             heroNet.textContent = `${champ.net_profit_pct > 0 ? '+' : ''}%${champ.net_profit_pct || 0}`;
             heroNet.className = (champ.net_profit_pct || 0) >= 0 ? 'text-lg font-black text-emerald-400 mt-0.5' : 'text-lg font-black text-rose-400 mt-0.5';
@@ -157,8 +166,22 @@ function renderAllResults(data) {
         if (heroPf) heroPf.textContent = `${champ.profit_factor || 0.0}`;
         if (heroTrades) heroTrades.textContent = `${champ.total_trades || 0} (${champ.wins || 0}W / ${champ.losses || 0}L)`;
         if (heroTp1) heroTp1.textContent = `%${champ.tp1_win_rate || 0}`;
-        if (heroTp2) heroTp2.textContent = `%${champ.tp2_win_rate || champ.win_rate || 0}`;
+        if (heroTp2) heroTp2.textContent = `%${champ.tp2_win_rate != null ? champ.tp2_win_rate : (champ.win_rate || 0)}`;
         if (heroTp3) heroTp3.textContent = `%${champ.tp3_win_rate || 0}`;
+        // NEW: Sharpe & Max Consecutive Loss
+        if (heroSharpe) heroSharpe.textContent = `${champ.sharpe_ratio != null ? champ.sharpe_ratio : '—'}`;
+        if (heroMaxConsec) heroMaxConsec.textContent = `${champ.max_consecutive_losses != null ? champ.max_consecutive_losses : '—'}`;
+
+        // Equity Curve
+        const equityCurve = champ.equity_curve || [];
+        renderEquityCurve(equityCurve, champ.net_profit_pct || 0, champ.max_drawdown_pct || 0);
+
+        // Avg hold badge
+        const avgHoldBadge = document.getElementById('avgHoldBadge');
+        if (avgHoldBadge && champ.avg_hold_bars != null) {
+            avgHoldBadge.textContent = `⏱️ Ort. Hold: ${champ.avg_hold_bars} bar`;
+            avgHoldBadge.classList.remove('hidden');
+        }
     } else {
         if (heroName) heroName.textContent = "Yeterli İşlem Örneği Bulunamadı";
         if (heroCat) heroCat.textContent = "Mum aralığını veya zaman dilimini artırmayı deneyin.";
@@ -169,19 +192,157 @@ function renderAllResults(data) {
         if (heroTp1) heroTp1.textContent = "%0";
         if (heroTp2) heroTp2.textContent = "%0";
         if (heroTp3) heroTp3.textContent = "%0";
+        if (heroSharpe) heroSharpe.textContent = "—";
+        if (heroMaxConsec) heroMaxConsec.textContent = "—";
     }
 
     renderLeaderboardRows(leaderboard);
 
-    // Varsayılan olarak şampiyon stratejinin işlemlerini göster
+    // Varsayılan olarak şampiyon stratejinin son 15 işlemini göster
+    showingAllTrades = false;
+    currentStrategyForTrades = champ;
     if (champ && champ.recent_trades && champ.recent_trades.length > 0) {
         renderTradesTable(champ.recent_trades, champ.name);
+        updateTradesCountInfo(champ.recent_trades.length, (champ.all_trades || []).length);
     } else if (leaderboard.length > 0 && leaderboard[0].recent_trades) {
+        currentStrategyForTrades = leaderboard[0];
         renderTradesTable(leaderboard[0].recent_trades, leaderboard[0].name);
+        updateTradesCountInfo(leaderboard[0].recent_trades.length, (leaderboard[0].all_trades || []).length);
     } else {
         renderTradesTable([], "Strateji");
     }
 }
+
+function updateTradesCountInfo(showing, total) {
+    const el = document.getElementById('tradesCountInfo');
+    if (el) {
+        el.textContent = showing < total ? `Son ${showing} işlem (Toplam ${total})` : `Tüm ${total} işlem`;
+    }
+}
+
+function toggleAllTrades() {
+    if (!currentStrategyForTrades) return;
+    showingAllTrades = !showingAllTrades;
+    const btn = document.getElementById('showAllTradesBtn');
+    const trades = showingAllTrades 
+        ? (currentStrategyForTrades.all_trades || currentStrategyForTrades.recent_trades || [])
+        : (currentStrategyForTrades.recent_trades || []);
+    const total = (currentStrategyForTrades.all_trades || currentStrategyForTrades.recent_trades || []).length;
+    renderTradesTable(trades, currentStrategyForTrades.name);
+    updateTradesCountInfo(trades.length, total);
+    if (btn) {
+        const span = btn.querySelector('span');
+        if (span) span.textContent = showingAllTrades ? 'Son 15\'i Göster' : 'Tümünü Göster';
+    }
+    lucide.createIcons();
+}
+
+function exportTradesToCSV() {
+    if (!currentStrategyForTrades) { showToast('Uyarı', 'Önce bir strateji seçin.', true); return; }
+    const trades = currentStrategyForTrades.all_trades || currentStrategyForTrades.recent_trades || [];
+    if (!trades.length) { showToast('Uyarı', 'Export edilecek işlem bulunamadı.', true); return; }
+    
+    const headers = ['Giriş Zamanı', 'Çıkış Zamanı', 'Yön', 'Giriş Fiyatı', 'Stop Loss', 'TP1', 'TP2', 'TP3', 'Çıkış Fiyatı', 'Kâr/Zarar %', 'Sonuç', 'Çıkış Nedeni'];
+    const rows = trades.map(t => [
+        t.entry_time, t.exit_time, t.direction,
+        t.entry_price, t.stop_loss, t.tp1 || '', t.tp2 || '', t.tp3 || '',
+        t.exit_price, t.pnl_pct, t.is_win ? 'KÂR' : 'ZARAR', t.exit_reason
+    ]);
+    
+    const csvContent = [headers, ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' }); // BOM for Excel
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `backtest_${currentStrategyForTrades.id || 'strategy'}_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('CSV İndirildi', `${trades.length} işlem kaydı Excel'e uyumlu CSV formatında indirildi.`);
+}
+
+function renderEquityCurve(equityPoints, finalPnl, maxDD) {
+    const canvas = document.getElementById('equityCurveChart');
+    if (!canvas) return;
+
+    // Destroy previous chart
+    if (equityChartInstance) {
+        equityChartInstance.destroy();
+        equityChartInstance = null;
+    }
+
+    const finalPnlEl = document.getElementById('equityFinalPnl');
+    const maxDDEl = document.getElementById('equityMaxDD');
+    if (finalPnlEl) {
+        finalPnlEl.textContent = `${finalPnl >= 0 ? '+' : ''}%${finalPnl}`;
+        finalPnlEl.className = finalPnl >= 0
+            ? 'px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/30 font-mono'
+            : 'px-2.5 py-1 rounded-lg bg-rose-500/15 text-rose-400 font-bold border border-rose-500/30 font-mono';
+    }
+    if (maxDDEl) maxDDEl.textContent = `DD: -%${maxDD}`;
+
+    if (!equityPoints || equityPoints.length < 2) {
+        document.getElementById('equityChartEmpty')?.classList.remove('hidden');
+        return;
+    }
+    document.getElementById('equityChartEmpty')?.classList.add('hidden');
+
+    const labels = equityPoints.map((_, i) => i === 0 ? 'Başlangıç' : `İşlem ${i}`);
+    const isPositive = equityPoints[equityPoints.length - 1] >= 0;
+    const lineColor = isPositive ? '#10b981' : '#ef4444';
+    const fillColor = isPositive ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)';
+
+    equityChartInstance = new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Kümülatif Kâr/Zarar (%)',
+                data: equityPoints,
+                borderColor: lineColor,
+                backgroundColor: fillColor,
+                borderWidth: 2,
+                fill: true,
+                tension: 0.3,
+                pointRadius: equityPoints.length > 50 ? 0 : 3,
+                pointBackgroundColor: lineColor,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#0f141f',
+                    borderColor: '#1e293b',
+                    borderWidth: 1,
+                    titleColor: '#94a3b8',
+                    bodyColor: '#e2e8f0',
+                    callbacks: {
+                        label: ctx => ` ${ctx.parsed.y >= 0 ? '+' : ''}%${ctx.parsed.y.toFixed(2)}`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: { color: '#4b5563', maxTicksLimit: 10, font: { family: 'JetBrains Mono', size: 10 } },
+                    grid: { color: 'rgba(30, 41, 59, 0.4)' }
+                },
+                y: {
+                    ticks: {
+                        color: '#4b5563',
+                        font: { family: 'JetBrains Mono', size: 10 },
+                        callback: v => `%${v}`
+                    },
+                    grid: { color: 'rgba(30, 41, 59, 0.4)' }
+                }
+            },
+            interaction: { mode: 'index', intersect: false }
+        }
+    });
+}
+
+
 
 let activeCategoryFilter = 'ALL';
 
@@ -274,6 +435,8 @@ function renderLeaderboardRows(leaderboard) {
             </td>
             <td class="p-3.5 text-right font-bold text-sm text-amber-400">${s.profit_factor}</td>
             <td class="p-3.5 text-right font-bold text-sm text-rose-400">-%${s.max_drawdown_pct}</td>
+            <td class="p-3.5 text-right font-bold text-sm text-sky-400">${s.sharpe_ratio != null ? s.sharpe_ratio : '—'}</td>
+            <td class="p-3.5 text-right font-bold text-sm text-orange-400">${s.max_consecutive_losses != null ? s.max_consecutive_losses : '—'}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -281,7 +444,20 @@ function renderLeaderboardRows(leaderboard) {
 
 function selectStrategyForTradesView(strategy) {
     const trades = strategy.recent_trades || [];
+    currentStrategyForTrades = strategy;
+    showingAllTrades = false;
+    const btn = document.getElementById('showAllTradesBtn');
+    if (btn) { const span = btn.querySelector('span'); if (span) span.textContent = 'Tümünü Göster'; }
     renderTradesTable(trades, strategy.name);
+    updateTradesCountInfo(trades.length, (strategy.all_trades || []).length);
+    // Update equity curve for selected strategy
+    renderEquityCurve(strategy.equity_curve || [], strategy.net_profit_pct || 0, strategy.max_drawdown_pct || 0);
+    // Update avg hold badge
+    const avgHoldBadge = document.getElementById('avgHoldBadge');
+    if (avgHoldBadge && strategy.avg_hold_bars != null) {
+        avgHoldBadge.textContent = `⏱️ Ort. Hold: ${strategy.avg_hold_bars} bar`;
+        avgHoldBadge.classList.remove('hidden');
+    }
     showToast(strategy.name, `${trades.length} adet geçmiş işlem kaydı listelendi.`);
 }
 

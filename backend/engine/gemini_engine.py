@@ -134,7 +134,7 @@ def analyze_with_gemini(symbol: str, setup: Dict[str, Any], df: pd.DataFrame, us
         ],
         "generationConfig": {
             "temperature": 0.2,
-            "maxOutputTokens": 1024
+            "maxOutputTokens": 4096
         }
     }
 
@@ -227,10 +227,14 @@ def chat_with_gemini(
     )
 
     if history and len(history) > 0:
+        # Always prepend system prompt to first user message if not already there
         for turn in history:
             role = "user" if turn.get("role") in ["user", "human"] else "model"
             text = turn.get("content", "").strip()
             if text:
+                # For the first user turn, prepend the system prompt
+                if not contents and role == "user":
+                    text = f"{system_prompt}\n\n{text}"
                 contents.append({
                     "role": role,
                     "parts": [{"text": text}]
@@ -249,7 +253,7 @@ def chat_with_gemini(
         "contents": contents,
         "generationConfig": {
             "temperature": 0.3,
-            "maxOutputTokens": 2048
+            "maxOutputTokens": 4096
         }
     }
 

@@ -66,23 +66,22 @@ class StrategyAlertService:
         self.is_running = True
         print("🔔 [TELEGRAM RADAR SERVICE] Akıllı Anti-Spam & Tazelik Filtreli Alarm Servisi Başlatıldı.")
         
-        # 1. Başlangıçta sessiz ısınma (Eski sinyalleri spam olarak göndermeyi engeller)
-        try:
-            config = load_telegram_config()
-            if config.get("enabled", False):
-                print("⏳ [TELEGRAM] Başlangıç ısınması yapılıyor (Eski sinyaller önbelleğe alınıyor)...")
-                await self.check_and_notify_radars(config, is_warmup=True)
-                self.is_warmed_up = True
-                print("✅ [TELEGRAM] Başlangıç ısınması tamamlandı. Yalnızca YENİ CANLI sinyaller iletilecektir.")
-        except Exception as e:
-            print(f"⚠️ Isınma hatası: {e}")
-            self.is_warmed_up = True
-
         while self.is_running:
             try:
                 config = load_telegram_config()
                 if config.get("enabled", False) and (config.get("notify_retest") or config.get("notify_confirmed")):
-                    await self.check_and_notify_radars(config, is_warmup=False)
+                    # Always run warmup first if not yet warmed up
+                    if not self.is_warmed_up:
+                        print("⏳ [TELEGRAM] Başlangıç ısınması yapılıyor (Eski sinyaller önbelleğe alınıyor)...")
+                        try:
+                            await self.check_and_notify_radars(config, is_warmup=True)
+                            self.is_warmed_up = True
+                            print("✅ [TELEGRAM] Başlangıç ısınması tamamlandı. Yalnızca YENİ CANLI sinyaller iletilecektir.")
+                        except Exception as e:
+                            print(f"⚠️ Isınma hatası: {e}")
+                            self.is_warmed_up = True
+                    else:
+                        await self.check_and_notify_radars(config, is_warmup=False)
             except Exception as e:
                 print(f"⚠️ [TELEGRAM RADAR SERVICE] Hata: {e}")
                 
@@ -125,11 +124,12 @@ class StrategyAlertService:
     def _get_setup_identifier(self, coin: Dict[str, Any], strat_type: str, tf: str) -> str:
         symbol = coin.get("symbol", "")
         direction = coin.get("direction", "")
-        bo_level = coin.get("breakout_level") or coin.get("pdh") or coin.get("pdl") or coin.get("swing_level", 0.0)
+        # Round to 2 decimal places to avoid float precision spam (94.0 vs 94.00001)
+        raw_level = coin.get("breakout_level") or coin.get("pdh") or coin.get("pdl") or coin.get("swing_level", 0.0)
+        bo_level = round(float(raw_level or 0.0), 2)
         bo_bar = coin.get("breakout_bar", {})
         bo_time = bo_bar.get("time_str") or bo_bar.get("iso_time") or str(bo_bar.get("timestamp", ""))
         pat_name = coin.get("strategy_name", "")
-
         return f"{strat_type}_{tf}_{symbol}_{direction}_{bo_level}_{bo_time}_{pat_name}"
 
     def _process_stage_alerts(self, stages: Dict[str, Any], strat_type: str, tf: str, config: Dict[str, Any], is_warmup: bool = False):

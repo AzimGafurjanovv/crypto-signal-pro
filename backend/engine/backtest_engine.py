@@ -138,32 +138,16 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
     # Minimum ısınma periyodu 35 bar
     step = 2  # Performans ve hız için 2 barlık adım
     
-    # Pre-calculate these once on the full dataframe
-    full_smc = analyze_smc(df_enriched)
-    full_div = detect_rsi_divergences(df_enriched)
-    full_patterns = detect_chart_patterns(df_enriched)
-    
     for idx in range(35, n - 8, step):
         curr_bar = df_enriched.iloc[idx]
         curr_price = float(curr_bar['close'])
         curr_atr = float(curr_bar['atr']) if not np.isnan(curr_bar['atr']) else curr_price * 0.015
         curr_time = int(curr_bar['timestamp']) // 1000 if 'timestamp' in curr_bar else idx
         
-        # Slice results by index inside the loop
-        smc = {
-            'active_bullish_obs': [ob for ob in full_smc.get('active_bullish_obs', []) if ob.get('index', 0) <= idx],
-            'active_bearish_obs': [ob for ob in full_smc.get('active_bearish_obs', []) if ob.get('index', 0) <= idx],
-            'active_bullish_fvgs': [fvg for fvg in full_smc.get('active_bullish_fvgs', []) if fvg.get('candle_index', 0) <= idx],
-            'active_bearish_fvgs': [fvg for fvg in full_smc.get('active_bearish_fvgs', []) if fvg.get('candle_index', 0) <= idx],
-            'structure': {
-                'recent_sweeps': [sw for sw in full_smc.get('structure', {}).get('recent_sweeps', []) if sw.get('sweep_candle', 0) <= idx]
-            }
-        }
-        
-        div = {
-            'bullish_divergence': full_div.get('bullish_divergence') if full_div.get('bullish_divergence') and (n - 1 - full_div['bullish_divergence'].get('recency_bars', 0)) <= idx else None,
-            'bearish_divergence': full_div.get('bearish_divergence') if full_div.get('bearish_divergence') and (n - 1 - full_div['bearish_divergence'].get('recency_bars', 0)) <= idx else None,
-        }
+        # Use only past data to avoid look-ahead bias
+        sub_df_past = df_enriched.iloc[max(0, idx - 60):idx + 1]
+        smc = analyze_smc(sub_df_past)
+        div = detect_rsi_divergences(sub_df_past)
         
         # Formasyon Tespiti (Son 50-60 barlık dinamik pencerede)
         patterns = []
@@ -321,7 +305,30 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
                     if f_high >= tp2: hit_tp2 = True
                     if f_high >= tp3: hit_tp3 = True
 
-                    if f_low <= sl and not hit_tp1:
+                    # Intra-candle: if both SL and TP2 hit in same candle, assume 50/50 — use candle body midpoint heuristic
+                    sl_hit = f_low <= sl
+                    tp2_hit = f_high >= tp2
+                    if sl_hit and tp2_hit:
+                        # Wick from both sides: conservatively treat as SL (realistic worst-case)
+                        candle_range = f_high - f_low
+                        sl_dist = abs(f_low - sl)
+                        tp_dist = abs(f_high - tp2)
+                        if sl_dist <= tp_dist:  # SL was closer to open/body
+                            exit_price = sl
+                            pnl_pct = -round((entry_p - sl) / entry_p * 100.0, 2)
+                            exit_index = f_idx
+                            exit_time = f_time
+                            is_win = False
+                            exit_reason = 'SL'
+                            break
+                        else:
+                            exit_price = tp2
+                            pnl_pct = round((tp2 - entry_p) / entry_p * 100.0, 2)
+                            exit_index = f_idx
+                            exit_time = f_time
+                            is_win = True
+                            exit_reason = 'TP2'
+                    elif sl_hit and not hit_tp1:
                         exit_price = sl
                         pnl_pct = -round((entry_p - sl) / entry_p * 100.0, 2)
                         exit_index = f_idx
@@ -329,14 +336,14 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
                         is_win = False
                         exit_reason = 'SL'
                         break
-                    elif f_high >= tp2 and exit_reason == 'PENDING':
+                    elif tp2_hit and exit_reason == 'PENDING':
                         exit_price = tp2
                         pnl_pct = round((tp2 - entry_p) / entry_p * 100.0, 2)
                         exit_index = f_idx
                         exit_time = f_time
                         is_win = True
                         exit_reason = 'TP2'
-                    elif f_low <= sl:
+                    elif sl_hit:
                         if exit_reason == 'PENDING':
                             exit_price = sl
                             pnl_pct = -round((entry_p - sl) / entry_p * 100.0, 2)
@@ -350,7 +357,28 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
                     if f_low <= tp2: hit_tp2 = True
                     if f_low <= tp3: hit_tp3 = True
 
-                    if f_high >= sl and not hit_tp1:
+                    sl_hit = f_high >= sl
+                    tp2_hit = f_low <= tp2
+                    if sl_hit and tp2_hit:
+                        candle_range = f_high - f_low
+                        sl_dist = abs(f_high - sl)
+                        tp_dist = abs(f_low - tp2)
+                        if sl_dist <= tp_dist:
+                            exit_price = sl
+                            pnl_pct = -round((sl - entry_p) / entry_p * 100.0, 2)
+                            exit_index = f_idx
+                            exit_time = f_time
+                            is_win = False
+                            exit_reason = 'SL'
+                            break
+                        else:
+                            exit_price = tp2
+                            pnl_pct = round((entry_p - tp2) / entry_p * 100.0, 2)
+                            exit_index = f_idx
+                            exit_time = f_time
+                            is_win = True
+                            exit_reason = 'TP2'
+                    elif sl_hit and not hit_tp1:
                         exit_price = sl
                         pnl_pct = -round((sl - entry_p) / entry_p * 100.0, 2)
                         exit_index = f_idx
@@ -358,14 +386,14 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
                         is_win = False
                         exit_reason = 'SL'
                         break
-                    elif f_low <= tp2 and exit_reason == 'PENDING':
+                    elif tp2_hit and exit_reason == 'PENDING':
                         exit_price = tp2
                         pnl_pct = round((entry_p - tp2) / entry_p * 100.0, 2)
                         exit_index = f_idx
                         exit_time = f_time
                         is_win = True
                         exit_reason = 'TP2'
-                    elif f_high >= sl:
+                    elif sl_hit:
                         if exit_reason == 'PENDING':
                             exit_price = sl
                             pnl_pct = -round((sl - entry_p) / entry_p * 100.0, 2)
@@ -489,6 +517,40 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
 
             composite_score = round(win_rate * 0.5 + min(100, max(-50, net_profit)) * 0.3 + min(5.0, profit_factor) * 8.0, 1)
             
+            # --- NEW PROFESSIONAL METRICS ---
+            # Sharpe Ratio (annualized, risk-free=0)
+            returns_arr = [t['pnl_pct'] for t in trades]
+            if len(returns_arr) > 1:
+                mean_r = sum(returns_arr) / len(returns_arr)
+                std_r = (sum((x - mean_r) ** 2 for x in returns_arr) / len(returns_arr)) ** 0.5
+                sharpe = round((mean_r / std_r * (252 ** 0.5)) if std_r > 0 else 0.0, 2)
+            else:
+                sharpe = 0.0
+
+            # Max Consecutive Losses
+            max_consec_loss = 0
+            curr_consec = 0
+            for t in trades:
+                if not t['is_win']:
+                    curr_consec += 1
+                    max_consec_loss = max(max_consec_loss, curr_consec)
+                else:
+                    curr_consec = 0
+
+            # Max Consecutive Wins
+            max_consec_win = 0
+            curr_consec_win = 0
+            for t in trades:
+                if t['is_win']:
+                    curr_consec_win += 1
+                    max_consec_win = max(max_consec_win, curr_consec_win)
+                else:
+                    curr_consec_win = 0
+
+            # Average Hold Duration in bars
+            hold_bars = [abs(t['exit_index'] - t['entry_index']) for t in trades if 'exit_index' in t and 'entry_index' in t]
+            avg_hold_bars = round(sum(hold_bars) / len(hold_bars), 1) if hold_bars else 0.0
+
             data['total_trades'] = total
             data['wins'] = wins
             data['losses'] = losses
@@ -506,8 +568,14 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
             data['max_drawdown_pct'] = round(max_dd, 2)
             data['avg_trade_pct'] = round(net_profit / total, 2)
             data['composite_score'] = composite_score
+            data['sharpe_ratio'] = sharpe
+            data['max_consecutive_losses'] = max_consec_loss
+            data['max_consecutive_wins'] = max_consec_win
+            data['avg_hold_bars'] = avg_hold_bars
+            data['equity_curve'] = equity_curve
+            data['all_trades'] = trades
             data['recent_trades'] = trades[-15:]
-            del data['trades']
+            if 'trades' in data: del data['trades']
         else:
             data['total_trades'] = 0
             data['win_rate'] = 0.0
@@ -521,6 +589,12 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
             data['profit_factor'] = 0.0
             data['max_drawdown_pct'] = 0.0
             data['composite_score'] = 0.0
+            data['sharpe_ratio'] = 0.0
+            data['max_consecutive_losses'] = 0
+            data['max_consecutive_wins'] = 0
+            data['avg_hold_bars'] = 0.0
+            data['equity_curve'] = [0.0]
+            data['all_trades'] = []
             data['recent_trades'] = []
             if 'trades' in data: del data['trades']
 

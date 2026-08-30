@@ -506,11 +506,9 @@ async function openRadarChartModal(coin) {
 function closeRadarChartModal() {
     const modal = document.getElementById('radarChartModal');
     if (modal) modal.classList.add('hidden');
-    if (radarChartInstance) {
-        try {
-            radarChartInstance.remove();
-        } catch (e) {}
-        radarChartInstance = null;
+    if (window._radarChartInstance) {
+        try { window._radarChartInstance.remove(); } catch(e) {}
+        window._radarChartInstance = null;
     }
 }
 
@@ -518,13 +516,12 @@ async function loadAndRenderRadarChart(coin) {
     const container = document.getElementById('radarModalChartArea');
     if (!container) return;
 
-    if (radarChartInstance) {
-        try {
-            radarChartInstance.remove();
-        } catch (e) {}
-        radarChartInstance = null;
+    // Cleanup previous chart instance
+    if (window._radarChartInstance) {
+        try { window._radarChartInstance.remove(); } catch(e) {}
+        window._radarChartInstance = null;
     }
-    container.innerHTML = '';
+    if (container) container.innerHTML = '';
 
     const width = container.clientWidth || 850;
     const height = container.clientHeight || 400;
@@ -559,6 +556,7 @@ async function loadAndRenderRadarChart(coin) {
     };
 
     radarChartInstance = LightweightCharts.createChart(container, chartOptions);
+    window._radarChartInstance = radarChartInstance;
 
     const candleSeries = radarChartInstance.addCandlestickSeries({
         upColor: '#10b981',

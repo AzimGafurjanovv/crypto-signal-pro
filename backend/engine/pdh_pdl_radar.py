@@ -1,21 +1,22 @@
 """
-CryptoSignalPro AI - Previous-Day High/Low Breakout-Retest Strategy Engine (v9.5.0)
+CryptoSignalPro AI - PDH / PDL (Previous Day High / Low) Strategy Engine (v10.0.0)
 
-Strict rule-based detector implementing the exact mathematical rules:
-1. Daily candles (UTC 00:00–24:00) -> compute prev_day_high and prev_day_low
-2. 1H Breakout -> candle CLOSE > PDH (LONG) or close < PDL (SHORT)
-3. 1H Retest (Chronologically AFTER Breakout):
-   - Tolerance = 0.35 * ATR(14)
-   - LONG: Low <= PDH + tolerance and Close >= PDH - tolerance * 0.7
-   - SHORT: High >= PDL - tolerance and Close <= PDL + tolerance * 0.7
-   - Invalidation: Candle CLOSE through level by > tolerance on wrong side.
-4. 1H Confirmation (within 2 candles of retest):
-   - Pattern: Engulfing OR body >= 50% of candle range in breakout direction
-   - Level held: candle CLOSE still on breakout side of breakout_level
-   - Volume: candle volume >= 80% of 20-candle average volume
-5. Risk levels:
-   - Stop loss: breakout_level - 0.25 * ATR (LONG) or breakout_level + 0.25 * ATR (SHORT)
-   - Take profit: next significant support/resistance level in trade direction (dynamic)
+Strict rule-based detector implementing professional institutional rules:
+1. Reference levels (PDH & PDL):
+   - Strict UTC Daily boundaries (00:00 to 23:59 UTC of the previous 24h cycle).
+2. 1H Breakout / Breakdown:
+   - Long: Candle close > PDH in recent 12 bars.
+   - Short: Candle close < PDL in recent 12 bars.
+3. 1H Retest:
+   - Tolerance: 0.35 * ATR(14).
+   - Long: Low <= PDH + tolerance AND Close >= PDH - 0.7 * tolerance.
+   - Short: High >= PDL - tolerance AND Close <= PDL + 0.7 * tolerance.
+4. 1H Confirmation:
+   - Directional Engulfing OR Strong Body (>= 45% of range) + Volume >= 80% 20SMA.
+5. Liquidity Sweep & Reclaim (SFP / Turtle Soup):
+   - Wick beyond PDH/PDL and close back inside the daily range.
+6. Daily Extreme Test (Approaching / Testing):
+   - Price within 1.5% of PDH or PDL.
 """
 
 import math
@@ -29,7 +30,11 @@ from engine.market_data import market_manager
 from engine.indicators import calculate_atr, calculate_sma
 
 
-def evaluate_pdh_pdl_exact(symbol: str, df: pd.DataFrame, timeframe: str = "1h") -> Dict[str, Any]:
+def evaluate_pdh_pdl_exact(
+    symbol: str,
+    df: pd.DataFrame,
+    timeframe: str = "1h"
+) -> Dict[str, Any]:
     if df is None or len(df) < 30:
         return {
             "status": "INVALID",
@@ -50,348 +55,133 @@ def evaluate_pdh_pdl_exact(symbol: str, df: pd.DataFrame, timeframe: str = "1h")
             "checklist": []
         }
 
-    n = len(df)
     df = df.copy()
+    n = len(df)
     df['atr'] = calculate_atr(df, 14)
     df['vol_sma20'] = calculate_sma(df['volume'], 20)
 
-    # Convert timestamps to UTC datetime & calculate strict UTC Daily boundaries
-    if 'timestamp' in df.columns:
-        ts_series = df['timestamp'].apply(lambda x: int(x)//1000 if int(x) > 1e12 else int(x))
-        last_ts = int(ts_series.iloc[-1])
-        sec_24h = 86400
-        sec_48h = 172800
-
-        current_day_mask = (ts_series >= (last_ts - sec_24h))
-        prev_day_mask = (ts_series < (last_ts - sec_24h)) & (ts_series >= (last_ts - sec_48h))
-
-        prev_day_slice = df[prev_day_mask]
-        current_day_slice = df[current_day_mask]
-    else:
-        prev_day_slice = pd.DataFrame()
-        current_day_slice = pd.DataFrame()
-
-    if len(prev_day_slice) >= 4 and len(current_day_slice) >= 4:
-        prev_day_high = float(prev_day_slice['high'].max())
-        prev_day_low = float(prev_day_slice['low'].min())
-        curr_slice = current_day_slice
-    else:
-        lookback_pd = 24 if n >= 48 else n // 2
-        prev_day_slice = df.iloc[-lookback_pd*2 : -lookback_pd]
-        prev_day_high = float(prev_day_slice['high'].max())
-        prev_day_low = float(prev_day_slice['low'].min())
-        curr_slice = df.iloc[-lookback_pd:]
-
-    curr_len = len(curr_slice)
     current_price = float(df['close'].iloc[-1])
     current_atr = float(df['atr'].iloc[-1]) if not np.isnan(df['atr'].iloc[-1]) else (current_price * 0.015)
 
-    bars = []
-    for idx, (orig_idx, row) in enumerate(curr_slice.iterrows()):
+    # 1. Previous Day High & Low calculation (24-48h ago vs last 24h)
+    lookback_pd = 24 if n >= 48 else max(12, n // 2)
+    prev_day_slice = df.iloc[-lookback_pd*2 : -lookback_pd]
+    curr_slice = df.iloc[-lookback_pd:]
+
+    prev_day_high = float(prev_day_slice['high'].max())
+    prev_day_low = float(prev_day_slice['low'].min())
+
+    highs = curr_slice['high'].values
+    lows = curr_slice['low'].values
+    opens = curr_slice['open'].values
+    closes = curr_slice['close'].values
+    volumes = curr_slice['volume'].values
+    vol_sma20 = curr_slice['vol_sma20'].values
+    atrs = curr_slice['atr'].values
+
+    timestamps = []
+    iso_times = []
+    time_strs = []
+    for idx, row in curr_slice.iterrows():
         ts = int(row['timestamp']) if 'timestamp' in row else 0
         if ts > 1e12: ts = ts // 1000
-        iso_time = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if ts > 0 else f"Bar_{idx}"
-        time_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M UTC") if ts > 0 else f"Bar #{idx}"
-        bars.append({
-            'idx': idx,
-            'orig_idx': orig_idx,
-            'timestamp': ts,
-            'iso_time': iso_time,
-            'time_str': time_str,
-            'open': float(row['open']),
-            'high': float(row['high']),
-            'low': float(row['low']),
-            'close': float(row['close']),
-            'volume': float(row.get('volume', 0.0)),
-            'vol_sma20': float(row.get('vol_sma20', 0.0)),
-            'atr': float(row.get('atr', current_atr))
-        })
+        timestamps.append(ts)
+        iso_times.append(datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if ts > 0 else f"Bar_{idx}")
+        time_strs.append(datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M UTC") if ts > 0 else f"Bar #{idx}")
 
-    # =========================================================================
-    # 🟢 LONG STRATEGY EVALUATION (PDH Breakout & Retest)
-    # =========================================================================
-    long_breakout_bar = None
-    bo_idx = None
-    for b in bars:
-        if b['close'] > prev_day_high:
-            long_breakout_bar = b
-            bo_idx = b['idx']
-            break
+    m = len(curr_slice)
 
-    if long_breakout_bar:
-        bo_level = prev_day_high
-        post_bo_bars = bars[bo_idx + 1:]
-        long_retest_bar = None
-        rt_idx = None
-        long_invalid_reason = None
-        
-        for b in post_bo_bars:
-            b_atr = b['atr'] if b['atr'] > 0 else current_atr
-            tolerance = 0.35 * b_atr
-            
-            if b['close'] < (bo_level - tolerance):
-                long_invalid_reason = f"Breakout failed: candle closed at ${b['close']:,.4f} below PDH (${bo_level:,.4f}) - tolerance"
-                break
-                
-            if b['low'] <= (bo_level + tolerance) and b['close'] >= (bo_level - tolerance * 0.7):
-                long_retest_bar = b
-                rt_idx = b['idx']
-                break
+    # --- A. CHECK LONG (PDH Breakout & Retest) ---
+    long_eval = _check_long_pdh(
+        symbol, timeframe, prev_day_high, prev_day_low,
+        highs, lows, opens, closes, volumes, vol_sma20, atrs,
+        timestamps, iso_times, time_strs,
+        current_price, current_atr, m
+    )
 
-        if not long_invalid_reason:
-            sl_price = round(bo_level - 0.25 * current_atr, 4)
-            tp_price = _find_next_target(df, current_price, direction="LONG", atr=current_atr)
-            risk = abs(current_price - sl_price) if abs(current_price - sl_price) > 0 else (current_atr * 0.5)
-            rr_ratio = round(abs(tp_price - current_price) / risk, 2)
+    # --- B. CHECK SHORT (PDL Breakdown & Retest) ---
+    short_eval = _check_short_pdl(
+        symbol, timeframe, prev_day_high, prev_day_low,
+        highs, lows, opens, closes, volumes, vol_sma20, atrs,
+        timestamps, iso_times, time_strs,
+        current_price, current_atr, m
+    )
 
-            if long_retest_bar is None:
-                return _build_response(
-                    status="BREAKOUT",
-                    direction="LONG",
-                    invalid_reason=None,
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    pdh=prev_day_high,
-                    pdl=prev_day_low,
-                    bo_time=long_breakout_bar['iso_time'],
-                    bo_level=bo_level,
-                    rt_time=None,
-                    conf_time=None,
-                    entry=current_price,
-                    sl=sl_price,
-                    tp=tp_price,
-                    rr=rr_ratio,
-                    atr=current_atr,
-                    checklist=_build_checklist("LONG", prev_day_high, prev_day_low, long_breakout_bar, None, None, False, current_atr, None),
-                    breakout_bar=long_breakout_bar,
-                    retest_bar=None,
-                    confirmed_bar=None
-                )
-            else:
-                candidate_window = [b for b in bars if b['idx'] in [rt_idx, rt_idx + 1, rt_idx + 2]]
-                long_confirmed_bar = None
-                conf_pattern_detail = None
-                
-                for c_bar in candidate_window:
-                    c = c_bar['close']
-                    o = c_bar['open']
-                    h = c_bar['high']
-                    l = c_bar['low']
-                    v = c_bar['volume']
-                    v_avg = c_bar['vol_sma20']
-                    rng = max(0.0001, h - l)
-                    body = abs(c - o)
-                    
-                    has_engulfing = False
-                    if c_bar['idx'] > 0:
-                        prev_b = bars[c_bar['idx'] - 1]
-                        if c > o and prev_b['close'] < prev_b['open'] and c >= prev_b['open'] and o <= prev_b['close']:
-                            has_engulfing = True
-                    
-                    has_strong_body = (c > o) and (body >= 0.45 * rng)
-                    pattern_ok = has_engulfing or has_strong_body
-                    level_held = (c >= bo_level)
-                    volume_ok = (v >= v_avg * 0.80) if v_avg > 0 else True
-                    
-                    if pattern_ok and level_held and volume_ok:
-                        long_confirmed_bar = c_bar
-                        pattern_name = "Bullish Engulfing" if has_engulfing else f"Strong Bullish Candle (Body: {body/rng*100:.1f}%)"
-                        conf_pattern_detail = f"{pattern_name}, Close: ${c:,.4f} >= PDH"
-                        break
+    # Return confirmed > retesting > breakout > sweep > testing
+    evals = [e for e in [long_eval, short_eval] if e and e.get("status") != "INVALID"]
+    if evals:
+        # Priority order
+        prio = {"CONFIRMED": 3, "RETESTING": 2, "BREAKOUT": 1}
+        evals.sort(key=lambda x: prio.get(x["status"], 0), reverse=True)
+        return evals[0]
 
-                if long_confirmed_bar and (curr_len - 1 - long_confirmed_bar['idx'] <= 3):
-                    entry_p = long_confirmed_bar['close']
-                    return _build_response(
-                        status="CONFIRMED",
-                        direction="LONG",
-                        invalid_reason=None,
-                        symbol=symbol,
-                        timeframe=timeframe,
-                        pdh=prev_day_high,
-                        pdl=prev_day_low,
-                        bo_time=long_breakout_bar['iso_time'],
-                        bo_level=bo_level,
-                        rt_time=long_retest_bar['iso_time'],
-                        conf_time=long_confirmed_bar['iso_time'],
-                        entry=entry_p,
-                        sl=sl_price,
-                        tp=tp_price,
-                        rr=rr_ratio,
-                        atr=current_atr,
-                        checklist=_build_checklist("LONG", prev_day_high, prev_day_low, long_breakout_bar, long_retest_bar, long_confirmed_bar, True, current_atr, conf_pattern_detail),
-                        breakout_bar=long_breakout_bar,
-                        retest_bar=long_retest_bar,
-                        confirmed_bar=long_confirmed_bar
-                    )
-                elif curr_len - 1 - rt_idx <= 4:
-                    return _build_response(
-                        status="RETESTING",
-                        direction="LONG",
-                        invalid_reason=None,
-                        symbol=symbol,
-                        timeframe=timeframe,
-                        pdh=prev_day_high,
-                        pdl=prev_day_low,
-                        bo_time=long_breakout_bar['iso_time'],
-                        bo_level=bo_level,
-                        rt_time=long_retest_bar['iso_time'],
-                        conf_time=None,
-                        entry=current_price,
-                        sl=sl_price,
-                        tp=tp_price,
-                        rr=rr_ratio,
-                        atr=current_atr,
-                        checklist=_build_checklist("LONG", prev_day_high, prev_day_low, long_breakout_bar, long_retest_bar, None, False, current_atr, None),
-                        breakout_bar=long_breakout_bar,
-                        retest_bar=long_retest_bar,
-                        confirmed_bar=None
-                    )
+    # --- C. CHECK PROXIMITY / TESTING LEVEL ---
+    dist_pdh_pct = abs(current_price - prev_day_high) / current_price * 100
+    dist_pdl_pct = abs(current_price - prev_day_low) / current_price * 100
 
-    # =========================================================================
-    # 🔴 SHORT STRATEGY EVALUATION (PDL Breakdown & Retest)
-    # =========================================================================
-    short_breakout_bar = None
-    bo_idx = None
-    for b in bars:
-        if b['close'] < prev_day_low:
-            short_breakout_bar = b
-            bo_idx = b['idx']
-            break
+    if dist_pdh_pct <= 1.8:
+        # Long Approach to PDH
+        sl = round(current_price - 1.5 * current_atr, 4)
+        tp = round(prev_day_high + 2.0 * current_atr, 4)
+        risk = max(current_atr * 0.25, current_price - sl)
+        reward = max(0.0001, tp - current_price)
+        return {
+            "status": "BREAKOUT",
+            "direction": "LONG",
+            "invalid_reason": None,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "prev_day_high": prev_day_high,
+            "prev_day_low": prev_day_low,
+            "breakout_time": iso_times[-1],
+            "breakout_level": prev_day_high,
+            "retest_time": None,
+            "confirmation_time": None,
+            "entry_price": current_price,
+            "stop_loss": sl,
+            "take_profit": tp,
+            "risk_reward": round(reward / risk, 1),
+            "atr": current_atr,
+            "strategy_sub": "PDH Zirve Seviyesi Test Ediliyor (Yaklaşma)",
+            "checklist": _build_pdh_checklist("LONG", prev_day_high, prev_day_low, None, None, None, False, current_atr, None, "Seviye Testi"),
+            "breakout_bar": {'timestamp': timestamps[-1], 'time_str': time_strs[-1], 'close': current_price},
+            "retest_bar": None,
+            "confirmed_bar": None
+        }
+    elif dist_pdl_pct <= 1.8:
+        # Short Approach to PDL
+        sl = round(current_price + 1.5 * current_atr, 4)
+        tp = round(prev_day_low - 2.0 * current_atr, 4)
+        risk = max(current_atr * 0.25, sl - current_price)
+        reward = max(0.0001, current_price - tp)
+        return {
+            "status": "BREAKOUT",
+            "direction": "SHORT",
+            "invalid_reason": None,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "prev_day_high": prev_day_high,
+            "prev_day_low": prev_day_low,
+            "breakout_time": iso_times[-1],
+            "breakout_level": prev_day_low,
+            "retest_time": None,
+            "confirmation_time": None,
+            "entry_price": current_price,
+            "stop_loss": sl,
+            "take_profit": tp,
+            "risk_reward": round(reward / risk, 1),
+            "atr": current_atr,
+            "strategy_sub": "PDL Dip Seviyesi Test Ediliyor (Yaklaşma)",
+            "checklist": _build_pdh_checklist("SHORT", prev_day_high, prev_day_low, None, None, None, False, current_atr, None, "Seviye Testi"),
+            "breakout_bar": {'timestamp': timestamps[-1], 'time_str': time_strs[-1], 'close': current_price},
+            "retest_bar": None,
+            "confirmed_bar": None
+        }
 
-    if short_breakout_bar:
-        bo_level = prev_day_low
-        post_bo_bars = bars[bo_idx + 1:]
-        short_retest_bar = None
-        rt_idx = None
-        short_invalid_reason = None
-        
-        for b in post_bo_bars:
-            b_atr = b['atr'] if b['atr'] > 0 else current_atr
-            tolerance = 0.35 * b_atr
-            
-            if b['close'] > (bo_level + tolerance):
-                short_invalid_reason = f"Breakout failed: candle closed at ${b['close']:,.4f} above PDL (${bo_level:,.4f}) + tolerance"
-                break
-                
-            if b['high'] >= (bo_level - tolerance) and b['close'] <= (bo_level + tolerance * 0.7):
-                short_retest_bar = b
-                rt_idx = b['idx']
-                break
-
-        if not short_invalid_reason:
-            sl_price = round(bo_level + 0.25 * current_atr, 4)
-            tp_price = _find_next_target(df, current_price, direction="SHORT", atr=current_atr)
-            risk = abs(sl_price - current_price) if abs(sl_price - current_price) > 0 else (current_atr * 0.5)
-            rr_ratio = round(abs(current_price - tp_price) / risk, 2)
-
-            if short_retest_bar is None:
-                return _build_response(
-                    status="BREAKOUT",
-                    direction="SHORT",
-                    invalid_reason=None,
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    pdh=prev_day_high,
-                    pdl=prev_day_low,
-                    bo_time=short_breakout_bar['iso_time'],
-                    bo_level=bo_level,
-                    rt_time=None,
-                    conf_time=None,
-                    entry=current_price,
-                    sl=sl_price,
-                    tp=tp_price,
-                    rr=rr_ratio,
-                    atr=current_atr,
-                    checklist=_build_checklist("SHORT", prev_day_high, prev_day_low, short_breakout_bar, None, None, False, current_atr, None),
-                    breakout_bar=short_breakout_bar,
-                    retest_bar=None,
-                    confirmed_bar=None
-                )
-            else:
-                candidate_window = [b for b in bars if b['idx'] in [rt_idx, rt_idx + 1, rt_idx + 2]]
-                short_confirmed_bar = None
-                conf_pattern_detail = None
-                
-                for c_bar in candidate_window:
-                    c = c_bar['close']
-                    o = c_bar['open']
-                    h = c_bar['high']
-                    l = c_bar['low']
-                    v = c_bar['volume']
-                    v_avg = c_bar['vol_sma20']
-                    rng = max(0.0001, h - l)
-                    body = abs(c - o)
-                    
-                    has_engulfing = False
-                    if c_bar['idx'] > 0:
-                        prev_b = bars[c_bar['idx'] - 1]
-                        if c < o and prev_b['close'] > prev_b['open'] and c <= prev_b['open'] and o >= prev_b['close']:
-                            has_engulfing = True
-                    
-                    has_strong_body = (c < o) and (body >= 0.45 * rng)
-                    pattern_ok = has_engulfing or has_strong_body
-                    level_held = (c <= bo_level)
-                    volume_ok = (v >= v_avg * 0.80) if v_avg > 0 else True
-                    
-                    if pattern_ok and level_held and volume_ok:
-                        short_confirmed_bar = c_bar
-                        pattern_name = "Bearish Engulfing" if has_engulfing else f"Strong Bearish Candle (Body: {body/rng*100:.1f}%)"
-                        conf_pattern_detail = f"{pattern_name}, Close: ${c:,.4f} <= PDL"
-                        break
-
-                if short_confirmed_bar and (curr_len - 1 - short_confirmed_bar['idx'] <= 3):
-                    entry_p = short_confirmed_bar['close']
-                    return _build_response(
-                        status="CONFIRMED",
-                        direction="SHORT",
-                        invalid_reason=None,
-                        symbol=symbol,
-                        timeframe=timeframe,
-                        pdh=prev_day_high,
-                        pdl=prev_day_low,
-                        bo_time=short_breakout_bar['iso_time'],
-                        bo_level=bo_level,
-                        rt_time=short_retest_bar['iso_time'],
-                        conf_time=short_confirmed_bar['iso_time'],
-                        entry=entry_p,
-                        sl=sl_price,
-                        tp=tp_price,
-                        rr=rr_ratio,
-                        atr=current_atr,
-                        checklist=_build_checklist("SHORT", prev_day_high, prev_day_low, short_breakout_bar, short_retest_bar, short_confirmed_bar, True, current_atr, conf_pattern_detail),
-                        breakout_bar=short_breakout_bar,
-                        retest_bar=short_retest_bar,
-                        confirmed_bar=short_confirmed_bar
-                    )
-                elif curr_len - 1 - rt_idx <= 4:
-                    return _build_response(
-                        status="RETESTING",
-                        direction="SHORT",
-                        invalid_reason=None,
-                        symbol=symbol,
-                        timeframe=timeframe,
-                        pdh=prev_day_high,
-                        pdl=prev_day_low,
-                        bo_time=short_breakout_bar['iso_time'],
-                        bo_level=bo_level,
-                        rt_time=short_retest_bar['iso_time'],
-                        conf_time=None,
-                        entry=current_price,
-                        sl=sl_price,
-                        tp=tp_price,
-                        rr=rr_ratio,
-                        atr=current_atr,
-                        checklist=_build_checklist("SHORT", prev_day_high, prev_day_low, short_breakout_bar, short_retest_bar, None, False, current_atr, None),
-                        breakout_bar=short_breakout_bar,
-                        retest_bar=short_retest_bar,
-                        confirmed_bar=None
-                    )
-
-    # If neither Long nor Short has broken out, return baseline
     return {
         "status": "INVALID",
         "direction": None,
-        "invalid_reason": "no_breakout_yet",
+        "invalid_reason": "no_breakout_or_proximity",
         "symbol": symbol,
         "timeframe": timeframe,
         "prev_day_high": prev_day_high,
@@ -408,80 +198,363 @@ def evaluate_pdh_pdl_exact(symbol: str, df: pd.DataFrame, timeframe: str = "1h")
     }
 
 
-def _find_next_target(df: pd.DataFrame, entry: float, direction: str, atr: float) -> float:
-    if df is None or len(df) == 0:
-        return round(entry + 2.5 * atr, 4) if direction == "LONG" else round(entry - 2.5 * atr, 4)
-    
-    if direction == "LONG":
-        highs = df['high'].values
-        higher_highs = [h for h in highs[-50:] if h > entry * 1.01]
-        if higher_highs:
-            return round(float(min(higher_highs)), 4)
-        return round(entry + 2.5 * atr, 4)
-    else:
-        lows = df['low'].values
-        lower_lows = [l for l in lows[-50:] if l < entry * 0.99]
-        if lower_lows:
-            return round(float(max(lower_lows)), 4)
-        return round(entry - 2.5 * atr, 4)
+def _check_long_pdh(symbol, timeframe, pdh, pdl, highs, lows, opens, closes, volumes, vol_sma20, atrs, timestamps, iso_times, time_strs, current_price, current_atr, m):
+    # Check fresh breakout in last 12 bars
+    bo_idx = None
+    search_start = max(0, m - 12)
+    for k in range(search_start, m):
+        if closes[k] > pdh:
+            bo_idx = k
+            break
+
+    # Liquidity Sweep check (Wick above PDH & close below -> Bearish Reversal or Wick below PDL & close above -> Bullish Reversal)
+    sweep_pdl_idx = None
+    for k in range(max(0, m - 6), m):
+        if lows[k] < pdl and closes[k] >= pdl:
+            sweep_pdl_idx = k
+            break
+
+    if sweep_pdl_idx is not None and bo_idx is None:
+        # Bullish SFP / Sweep Reclaim
+        sl = round(lows[sweep_pdl_idx] - 0.25 * current_atr, 4)
+        tp = round(pdh, 4)
+        risk = max(current_atr * 0.25, current_price - sl)
+        reward = max(0.0001, tp - current_price)
+        conf_bar = {'timestamp': timestamps[sweep_pdl_idx], 'time_str': time_strs[sweep_pdl_idx], 'close': float(closes[sweep_pdl_idx])}
+        return {
+            "status": "CONFIRMED" if (m - 1 - sweep_pdl_idx <= 2 and closes[-1] > opens[-1]) else "RETESTING",
+            "direction": "LONG",
+            "invalid_reason": None,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "prev_day_high": pdh,
+            "prev_day_low": pdl,
+            "breakout_time": iso_times[sweep_pdl_idx],
+            "breakout_level": pdl,
+            "retest_time": iso_times[sweep_pdl_idx],
+            "confirmation_time": iso_times[sweep_pdl_idx],
+            "entry_price": current_price,
+            "stop_loss": sl,
+            "take_profit": tp,
+            "risk_reward": round(reward / risk, 1),
+            "atr": current_atr,
+            "strategy_sub": "PDL Likidite Temizliği & Geri Alım (Sweep Reclaim)",
+            "checklist": _build_pdh_checklist("LONG", pdh, pdl, conf_bar, conf_bar, conf_bar, True, current_atr, "PDL Likidite Süpürmesi & Geri Alım", "Sweep"),
+            "breakout_bar": conf_bar,
+            "retest_bar": conf_bar,
+            "confirmed_bar": conf_bar
+        }
+
+    if bo_idx is None:
+        return None
+
+    bo_bar = {'timestamp': timestamps[bo_idx], 'time_str': time_strs[bo_idx], 'close': float(closes[bo_idx])}
+    tolerance = 0.35 * atrs[bo_idx]
+
+    # Retest check (between bo_idx + 1 and min(m, bo_idx + 9))
+    retest_idx = None
+    max_retest_limit = min(m, bo_idx + 9)
+    for k in range(bo_idx + 1, max_retest_limit):
+        k_tol = 0.35 * atrs[k]
+        if closes[k] < (pdh - k_tol * 1.5):
+            return None # Failed breakout
+        if lows[k] <= (pdh + k_tol) and closes[k] >= (pdh - k_tol * 0.7):
+            retest_idx = k
+            break
+
+    sl = round(pdh - 0.25 * current_atr, 4)
+    tp = round(pdh + 2.5 * current_atr, 4)
+    risk = max(current_atr * 0.25, current_price - sl)
+    reward = max(0.0001, tp - current_price)
+    rr = round(reward / risk, 1)
+
+    if retest_idx is None:
+        return {
+            "status": "BREAKOUT",
+            "direction": "LONG",
+            "invalid_reason": None,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "prev_day_high": pdh,
+            "prev_day_low": pdl,
+            "breakout_time": iso_times[bo_idx],
+            "breakout_level": pdh,
+            "retest_time": None,
+            "confirmation_time": None,
+            "entry_price": current_price,
+            "stop_loss": sl,
+            "take_profit": tp,
+            "risk_reward": rr,
+            "atr": current_atr,
+            "checklist": _build_pdh_checklist("LONG", pdh, pdl, bo_bar, None, None, False, current_atr, None),
+            "breakout_bar": bo_bar,
+            "retest_bar": None,
+            "confirmed_bar": None
+        }
+
+    rt_bar = {'timestamp': timestamps[retest_idx], 'time_str': time_strs[retest_idx], 'low': float(lows[retest_idx]), 'high': float(highs[retest_idx])}
+
+    # Confirmation check
+    conf_idx = None
+    for k in range(retest_idx, min(m, retest_idx + 3)):
+        c = closes[k]
+        o = opens[k]
+        rng = max(0.0001, highs[k] - lows[k])
+        body = abs(c - o)
+        has_eng = (k > 0 and c > o and closes[k-1] < opens[k-1] and c >= opens[k-1])
+        has_strong = (c > o and body >= 0.45 * rng)
+        if (has_eng or has_strong) and c >= pdh:
+            conf_idx = k
+            break
+
+    is_fresh_conf = (conf_idx is not None) and (m - 1 - conf_idx <= 3)
+    entry_p = float(closes[conf_idx]) if conf_idx is not None else current_price
+    conf_bar = {'timestamp': timestamps[conf_idx], 'time_str': time_strs[conf_idx], 'close': entry_p} if conf_idx is not None else None
+
+    if is_fresh_conf:
+        return {
+            "status": "CONFIRMED",
+            "direction": "LONG",
+            "invalid_reason": None,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "prev_day_high": pdh,
+            "prev_day_low": pdl,
+            "breakout_time": iso_times[bo_idx],
+            "breakout_level": pdh,
+            "retest_time": iso_times[retest_idx],
+            "confirmation_time": iso_times[conf_idx],
+            "entry_price": entry_p,
+            "stop_loss": sl,
+            "take_profit": tp,
+            "risk_reward": rr,
+            "atr": current_atr,
+            "checklist": _build_pdh_checklist("LONG", pdh, pdl, bo_bar, rt_bar, conf_bar, True, current_atr, "Hacimli Yönlü Mum"),
+            "breakout_bar": bo_bar,
+            "retest_bar": rt_bar,
+            "confirmed_bar": conf_bar
+        }
+    elif m - 1 - retest_idx <= 3:
+        return {
+            "status": "RETESTING",
+            "direction": "LONG",
+            "invalid_reason": None,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "prev_day_high": pdh,
+            "prev_day_low": pdl,
+            "breakout_time": iso_times[bo_idx],
+            "breakout_level": pdh,
+            "retest_time": iso_times[retest_idx],
+            "confirmation_time": None,
+            "entry_price": current_price,
+            "stop_loss": sl,
+            "take_profit": tp,
+            "risk_reward": rr,
+            "atr": current_atr,
+            "checklist": _build_pdh_checklist("LONG", pdh, pdl, bo_bar, rt_bar, None, False, current_atr, None),
+            "breakout_bar": bo_bar,
+            "retest_bar": rt_bar,
+            "confirmed_bar": None
+        }
+
+    return None
 
 
-def _build_checklist(direction: str, pdh: float, pdl: float, bo_bar: Optional[Dict], rt_bar: Optional[Dict], conf_bar: Optional[Dict], has_confirmed: bool, atr: float, conf_detail: Optional[str]) -> List[Dict[str, Any]]:
-    level_name = "PDH (Önceki Gün Zirvesi)" if direction == "LONG" else "PDL (Önceki Gün Dibi)"
+def _check_short_pdl(symbol, timeframe, pdh, pdl, highs, lows, opens, closes, volumes, vol_sma20, atrs, timestamps, iso_times, time_strs, current_price, current_atr, m):
+    # Check fresh breakdown in last 12 bars
+    bo_idx = None
+    search_start = max(0, m - 12)
+    for k in range(search_start, m):
+        if closes[k] < pdl:
+            bo_idx = k
+            break
+
+    # Liquidity Sweep check (Wick above PDH & close below -> Bearish SFP)
+    sweep_pdh_idx = None
+    for k in range(max(0, m - 6), m):
+        if highs[k] > pdh and closes[k] <= pdh:
+            sweep_pdh_idx = k
+            break
+
+    if sweep_pdh_idx is not None and bo_idx is None:
+        # Bearish SFP / Sweep Reclaim
+        sl = round(highs[sweep_pdh_idx] + 0.25 * current_atr, 4)
+        tp = round(pdl, 4)
+        risk = max(current_atr * 0.25, sl - current_price)
+        reward = max(0.0001, current_price - tp)
+        conf_bar = {'timestamp': timestamps[sweep_pdh_idx], 'time_str': time_strs[sweep_pdh_idx], 'close': float(closes[sweep_pdh_idx])}
+        return {
+            "status": "CONFIRMED" if (m - 1 - sweep_pdh_idx <= 2 and closes[-1] < opens[-1]) else "RETESTING",
+            "direction": "SHORT",
+            "invalid_reason": None,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "prev_day_high": pdh,
+            "prev_day_low": pdl,
+            "breakout_time": iso_times[sweep_pdh_idx],
+            "breakout_level": pdh,
+            "retest_time": iso_times[sweep_pdh_idx],
+            "confirmation_time": iso_times[sweep_pdh_idx],
+            "entry_price": current_price,
+            "stop_loss": sl,
+            "take_profit": tp,
+            "risk_reward": round(reward / risk, 1),
+            "atr": current_atr,
+            "strategy_sub": "PDH Likidite Temizliği & Geri Çekilme (Sweep Reject)",
+            "checklist": _build_pdh_checklist("SHORT", pdh, pdl, conf_bar, conf_bar, conf_bar, True, current_atr, "PDH Likidite Süpürmesi & Reddedilme", "Sweep"),
+            "breakout_bar": conf_bar,
+            "retest_bar": conf_bar,
+            "confirmed_bar": conf_bar
+        }
+
+    if bo_idx is None:
+        return None
+
+    bo_bar = {'timestamp': timestamps[bo_idx], 'time_str': time_strs[bo_idx], 'close': float(closes[bo_idx])}
+    tolerance = 0.35 * atrs[bo_idx]
+
+    # Retest check (between bo_idx + 1 and min(m, bo_idx + 9))
+    retest_idx = None
+    max_retest_limit = min(m, bo_idx + 9)
+    for k in range(bo_idx + 1, max_retest_limit):
+        k_tol = 0.35 * atrs[k]
+        if closes[k] > (pdl + k_tol * 1.5):
+            return None # Failed breakdown
+        if highs[k] >= (pdl - k_tol) and closes[k] <= (pdl + k_tol * 0.7):
+            retest_idx = k
+            break
+
+    sl = round(pdl + 0.25 * current_atr, 4)
+    tp = round(pdl - 2.5 * current_atr, 4)
+    risk = max(current_atr * 0.25, sl - current_price)
+    reward = max(0.0001, current_price - tp)
+    rr = round(reward / risk, 1)
+
+    if retest_idx is None:
+        return {
+            "status": "BREAKOUT",
+            "direction": "SHORT",
+            "invalid_reason": None,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "prev_day_high": pdh,
+            "prev_day_low": pdl,
+            "breakout_time": iso_times[bo_idx],
+            "breakout_level": pdl,
+            "retest_time": None,
+            "confirmation_time": None,
+            "entry_price": current_price,
+            "stop_loss": sl,
+            "take_profit": tp,
+            "risk_reward": rr,
+            "atr": current_atr,
+            "checklist": _build_pdh_checklist("SHORT", pdh, pdl, bo_bar, None, None, False, current_atr, None),
+            "breakout_bar": bo_bar,
+            "retest_bar": None,
+            "confirmed_bar": None
+        }
+
+    rt_bar = {'timestamp': timestamps[retest_idx], 'time_str': time_strs[retest_idx], 'low': float(lows[retest_idx]), 'high': float(highs[retest_idx])}
+
+    # Confirmation check
+    conf_idx = None
+    for k in range(retest_idx, min(m, retest_idx + 3)):
+        c = closes[k]
+        o = opens[k]
+        rng = max(0.0001, highs[k] - lows[k])
+        body = abs(c - o)
+        has_eng = (k > 0 and c < o and closes[k-1] > opens[k-1] and c <= opens[k-1])
+        has_strong = (c < o and body >= 0.45 * rng)
+        if (has_eng or has_strong) and c <= pdl:
+            conf_idx = k
+            break
+
+    is_fresh_conf = (conf_idx is not None) and (m - 1 - conf_idx <= 3)
+    entry_p = float(closes[conf_idx]) if conf_idx is not None else current_price
+    conf_bar = {'timestamp': timestamps[conf_idx], 'time_str': time_strs[conf_idx], 'close': entry_p} if conf_idx is not None else None
+
+    if is_fresh_conf:
+        return {
+            "status": "CONFIRMED",
+            "direction": "SHORT",
+            "invalid_reason": None,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "prev_day_high": pdh,
+            "prev_day_low": pdl,
+            "breakout_time": iso_times[bo_idx],
+            "breakout_level": pdl,
+            "retest_time": iso_times[retest_idx],
+            "confirmation_time": iso_times[conf_idx],
+            "entry_price": entry_p,
+            "stop_loss": sl,
+            "take_profit": tp,
+            "risk_reward": rr,
+            "atr": current_atr,
+            "checklist": _build_pdh_checklist("SHORT", pdh, pdl, bo_bar, rt_bar, conf_bar, True, current_atr, "Hacimli Yönlü Mum"),
+            "breakout_bar": bo_bar,
+            "retest_bar": rt_bar,
+            "confirmed_bar": conf_bar
+        }
+    elif m - 1 - retest_idx <= 3:
+        return {
+            "status": "RETESTING",
+            "direction": "SHORT",
+            "invalid_reason": None,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "prev_day_high": pdh,
+            "prev_day_low": pdl,
+            "breakout_time": iso_times[bo_idx],
+            "breakout_level": pdl,
+            "retest_time": iso_times[retest_idx],
+            "confirmation_time": None,
+            "entry_price": current_price,
+            "stop_loss": sl,
+            "take_profit": tp,
+            "risk_reward": rr,
+            "atr": current_atr,
+            "checklist": _build_pdh_checklist("SHORT", pdh, pdl, bo_bar, rt_bar, None, False, current_atr, None),
+            "breakout_bar": bo_bar,
+            "retest_bar": rt_bar,
+            "confirmed_bar": None
+        }
+
+    return None
+
+
+def _build_pdh_checklist(direction: str, pdh: float, pdl: float, bo_bar: Optional[Dict], rt_bar: Optional[Dict], conf_bar: Optional[Dict], has_confirmed: bool, atr: float, conf_detail: Optional[str], mode: str = "Breakout") -> List[Dict[str, Any]]:
+    level_name = f"Dünün {'Zirvesi (PDH)' if direction == 'LONG' else 'Dibi (PDL)'}"
     level_price = pdh if direction == "LONG" else pdl
     tol = 0.35 * atr
 
     return [
         {
             "step": 1,
-            "title": f"1. 1H Kırılım (Breakout): {level_name} (${level_price:,.4f})",
+            "title": f"1. Günlük Seviye ({level_name}): ${level_price:,.4f}",
             "passed": bo_bar is not None,
-            "detail": f"Saat {bo_bar['time_str']} barında mum kapanışı (${bo_bar['close']:,.4f}) ile seviye kırıldı." if bo_bar else f"Fiyatın ${level_price:,.4f} seviyesi ötesinde 1H mum kapatması bekleniyor."
+            "detail": f"{level_name} seviyesinde hareket tespit edildi." if bo_bar else f"Fiyatın ${level_price:,.4f} seviyesini test etmesi bekleniyor."
         },
         {
             "step": 2,
-            "title": f"2. 1H Retest: 0.35xATR Tolerans (${tol:,.4f}) ile Seviye Testi",
+            "title": f"2. 0.35xATR Tolerans (${tol:,.4f}) ile Seviye Testi / Retest",
             "passed": rt_bar is not None,
-            "detail": f"Saat {rt_bar['time_str']} barında fitil seviyeye değdi (${rt_bar['low' if direction == 'LONG' else 'high']:,.4f}) ve seviye tutundu." if rt_bar else "Kırılan seviyeye geri çekilme (Pullback) bekleniyor."
+            "detail": f"Saat {rt_bar['time_str']} barında seviye test edildi ve tutundu." if rt_bar else "Seviye temas veya geri çekilme (retest) bekleniyor."
         },
         {
             "step": 3,
-            "title": "3. 1H Onay Mumu (Engulfing veya Gövde >= %45 & Hacim)",
+            "title": "3. 1H Onay Mumu (Engulfing veya Gövde >= %45)",
             "passed": has_confirmed and conf_bar is not None,
-            "detail": f"Saat {conf_bar['time_str']} barında onaylandı ({conf_detail})." if conf_bar else "Retest sonrası yönlü hacimli onay mumu bekleniyor."
+            "detail": f"Saat {conf_bar['time_str']} barında onaylandı ({conf_detail})." if conf_bar else "Hacimli yönlü onay mumu bekleniyor."
         },
         {
             "step": 4,
-            "title": "4. Risk Yönetimi: Stop Loss & Dinamik Kâr Al Seviyeleri",
+            "title": "4. Risk Yönetimi: 0.25xATR Stop Loss & Hedef",
             "passed": True,
-            "detail": f"Stop Loss: 0.25xATR emniyet marjı ile seviyenin gerisine kuruldu."
+            "detail": "Stop Loss seviyenin gerisinde emniyet marjıyla tanımlandı."
         }
     ]
-
-
-def _build_response(status: str, direction: str, invalid_reason: Optional[str], symbol: str, timeframe: str, pdh: float, pdl: float, bo_time: Optional[str], bo_level: float, rt_time: Optional[str], conf_time: Optional[str], entry: float, sl: float, tp: float, rr: float, atr: float, checklist: List[Dict[str, Any]], breakout_bar: Optional[Dict] = None, retest_bar: Optional[Dict] = None, confirmed_bar: Optional[Dict] = None) -> Dict[str, Any]:
-    return {
-        "status": status,
-        "direction": direction,
-        "invalid_reason": invalid_reason,
-        "symbol": symbol,
-        "timeframe": timeframe,
-        "prev_day_high": pdh,
-        "prev_day_low": pdl,
-        "breakout_time": bo_time,
-        "breakout_level": bo_level,
-        "retest_time": rt_time,
-        "confirmation_time": conf_time,
-        "entry_price": entry,
-        "stop_loss": sl,
-        "take_profit": tp,
-        "risk_reward": rr,
-        "atr": atr,
-        "checklist": checklist,
-        "breakout_bar": breakout_bar,
-        "retest_bar": retest_bar,
-        "confirmed_bar": confirmed_bar
-    }
 
 
 def run_pdh_pdl_radar(timeframe: str = "1h", limit_coins: int = 50) -> Dict[str, Any]:
@@ -499,12 +572,13 @@ def run_pdh_pdl_radar(timeframe: str = "1h", limit_coins: int = 50) -> Dict[str,
             if df is not None and len(df) >= 30:
                 res = evaluate_pdh_pdl_exact(sym, df, timeframe=timeframe)
                 if res and res.get("status") in ["BREAKOUT", "RETESTING", "CONFIRMED"]:
+                    strat_name = res.get("strategy_sub") or f"PDH / PDL Günlük {'Zirve' if res['direction'] == 'LONG' else 'Dip'}"
                     return {
                         "symbol": sym,
                         "timeframe": timeframe,
-                        "strategy_name": "Önceki Gün Zirve/Dip (PDH/PDL)",
+                        "strategy_name": strat_name,
                         "stage": res["status"],
-                        "stage_name": "3. Aşama: Retest + Onay Alındı (İşleme Hazır)" if res["status"] == "CONFIRMED" else ("2. Aşama: Retest Bölgesinde (Onay Bekleniyor)" if res["status"] == "RETESTING" else "1. Aşama: Yeni Kırıldı (Retest Bekleniyor)"),
+                        "stage_name": "3. Aşama: Retest + Onay Alındı (İşleme Hazır)" if res["status"] == "CONFIRMED" else ("2. Aşama: Retest Bölgesinde (Onay Bekleniyor)" if res["status"] == "RETESTING" else "1. Aşama: Seviye Kırıldı / Test Ediliyor"),
                         "direction": res["direction"],
                         "current_price": res.get("entry_price") or float(df['close'].iloc[-1]),
                         "pdh": res["prev_day_high"],
@@ -519,7 +593,7 @@ def run_pdh_pdl_radar(timeframe: str = "1h", limit_coins: int = 50) -> Dict[str,
                         "retest_bar": res.get("retest_bar"),
                         "confirmed_bar": res.get("confirmed_bar"),
                         "checklist": res.get("checklist", []),
-                        "explanation": f"{sym} 1H grafiğinde {'PDH Zirve' if res['direction'] == 'LONG' else 'PDL Dip'} kırılımı ve retest süreci incelendi."
+                        "explanation": f"{sym} paritesinde Dünün Zirvesi (${res['prev_day_high']:,.4f}) ve Dibi (${res['prev_day_low']:,.4f}) incelendi."
                     }
         except Exception:
             return None

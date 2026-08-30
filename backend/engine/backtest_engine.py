@@ -97,6 +97,204 @@ ALL_STRATEGIES = [
     }
 ]
 
+def _get_strategy_trade_params(
+    strat_id: str,
+    direction: str,
+    curr_price: float,
+    curr_atr: float,
+    curr_bar: pd.Series,
+    smc: Dict[str, Any],
+    div: Dict[str, Any],
+    patterns: List[Dict[str, Any]],
+    df_enriched: pd.DataFrame,
+    idx: int
+) -> Dict[str, Any]:
+    """Her stratejinin kendi doğasına uygun özel SL, TP1, TP2, TP3, Trailing ve Süre kurallarını belirler."""
+    entry_p = curr_price
+    use_trailing = False
+    
+    # 1. SMC Order Block (OB Kutu Tabanı/Tavanı Stop & Yüksek R:R $1:3.5 - $1:5.5)
+    if strat_id == 'smc_order_block':
+        max_bars = 35
+        if direction == 'LONG':
+            ob = smc['active_bullish_obs'][0] if smc.get('active_bullish_obs') else None
+            sl = float(ob['bottom']) * 0.998 if ob else entry_p - max(curr_atr * 1.2, entry_p * 0.010)
+            risk = max(entry_p - sl, entry_p * 0.008)
+            tp1 = round(entry_p + risk * 2.0, 4)
+            tp2 = round(entry_p + risk * 3.5, 4)
+            tp3 = round(entry_p + risk * 5.5, 4)
+            entry_desc = "Kurumsal Bullish Order Block bölgesine temas/retest sonrası alım."
+        else:
+            ob = smc['active_bearish_obs'][0] if smc.get('active_bearish_obs') else None
+            sl = float(ob['top']) * 1.002 if ob else entry_p + max(curr_atr * 1.2, entry_p * 0.010)
+            risk = max(sl - entry_p, entry_p * 0.008)
+            tp1 = round(entry_p - risk * 2.0, 4)
+            tp2 = round(entry_p - risk * 3.5, 4)
+            tp3 = round(entry_p - risk * 5.5, 4)
+            entry_desc = "Kurumsal Bearish Order Block direnç bölgesinden ret sonrası satış."
+
+    # 2. SMC Fair Value Gap (FVG %50 Denge Dolumu)
+    elif strat_id == 'smc_fvg':
+        max_bars = 28
+        if direction == 'LONG':
+            fvg = smc['active_bullish_fvgs'][0] if smc.get('active_bullish_fvgs') else None
+            sl = float(fvg['bottom']) * 0.998 if fvg else entry_p - max(curr_atr * 1.3, entry_p * 0.010)
+            risk = max(entry_p - sl, entry_p * 0.009)
+            tp1 = round(entry_p + risk * 1.8, 4)
+            tp2 = round(entry_p + risk * 3.0, 4)
+            tp3 = round(entry_p + risk * 4.5, 4)
+            entry_desc = "Bullish FVG dengesizlik boşluğu dolumu sonrası tepki alımı."
+        else:
+            fvg = smc['active_bearish_fvgs'][0] if smc.get('active_bearish_fvgs') else None
+            sl = float(fvg['top']) * 1.002 if fvg else entry_p + max(curr_atr * 1.3, entry_p * 0.010)
+            risk = max(sl - entry_p, entry_p * 0.009)
+            tp1 = round(entry_p - risk * 1.8, 4)
+            tp2 = round(entry_p - risk * 3.0, 4)
+            tp3 = round(entry_p - risk * 4.5, 4)
+            entry_desc = "Bearish FVG direnç boşluğu dolumu sonrası satış."
+
+    # 3. SMC Likidite Avı & Reclaim (Sweep)
+    elif strat_id == 'smc_liquidity_sweep':
+        max_bars = 22
+        sweeps = smc.get('structure', {}).get('recent_sweeps', [])
+        if direction == 'LONG':
+            sw = sweeps[0] if sweeps else None
+            sl = float(sw['swept_level']) * 0.995 if sw else entry_p - max(curr_atr * 1.4, entry_p * 0.012)
+            risk = max(entry_p - sl, entry_p * 0.010)
+            tp1 = round(entry_p + risk * 1.8, 4)
+            tp2 = round(entry_p + risk * 3.2, 4)
+            tp3 = round(entry_p + risk * 5.0, 4)
+            entry_desc = "Dip likidite temizliği (SSL Sweep) sonrası güçlü reclaim alımı."
+        else:
+            sw = sweeps[0] if sweeps else None
+            sl = float(sw['swept_level']) * 1.005 if sw else entry_p + max(curr_atr * 1.4, entry_p * 0.012)
+            risk = max(sl - entry_p, entry_p * 0.010)
+            tp1 = round(entry_p - risk * 1.8, 4)
+            tp2 = round(entry_p - risk * 3.2, 4)
+            tp3 = round(entry_p - risk * 5.0, 4)
+            entry_desc = "Tepe likidite temizliği (BSL Sweep) sonrası satış."
+
+    # 4. Formasyonlar: Geometrik H (Yükseklik) ve Boyun Çizgisi Hedefleri
+    elif strat_id in ['double_bottom_top', 'triangle_breakout', 'range_breakout', 'trendline_breakout', 'sr_flip_retest', 'chart_patterns_all']:
+        max_bars = 45
+        matched_pat = next((p for p in patterns if (p.get('type') == direction)), None) if patterns else None
+        if matched_pat and matched_pat.get('target'):
+            h = abs(float(matched_pat['target']) - entry_p)
+        else:
+            h = curr_atr * 3.0
+            
+        risk = max(h * 0.45, curr_atr * 1.4)
+        if direction == 'LONG':
+            sl = entry_p - risk
+            tp1 = round(entry_p + h * 0.618, 4)
+            tp2 = round(entry_p + h * 1.000, 4)
+            tp3 = round(entry_p + h * 1.618, 4)
+            entry_desc = f"{matched_pat['name'] if matched_pat else 'Grafik Formasyonu'} kırılımı ve boyun çizgisi teyidi."
+        else:
+            sl = entry_p + risk
+            tp1 = round(entry_p - h * 0.618, 4)
+            tp2 = round(entry_p - h * 1.000, 4)
+            tp3 = round(entry_p - h * 1.618, 4)
+            entry_desc = f"{matched_pat['name'] if matched_pat else 'Grafik Formasyonu'} aşağı kırılımı."
+
+    # 5. PDH / PDL Günlük Likidite (24 Bar Gün İçi Seans Döngüsü)
+    elif strat_id == 'pdh_pdl_breakout_retest_user':
+        max_bars = 24
+        risk = max(curr_atr * 1.3, entry_p * 0.012)
+        if direction == 'LONG':
+            sl = entry_p - risk
+            tp1 = round(entry_p + curr_atr * 1.8, 4)
+            tp2 = round(entry_p + curr_atr * 3.0, 4)
+            tp3 = round(entry_p + curr_atr * 4.5, 4)
+            entry_desc = "Önceki Günün Zirvesi (PDH) kırılımı ve retesti teyidi."
+        else:
+            sl = entry_p + risk
+            tp1 = round(entry_p - curr_atr * 1.8, 4)
+            tp2 = round(entry_p - curr_atr * 3.0, 4)
+            tp3 = round(entry_p - curr_atr * 4.5, 4)
+            entry_desc = "Önceki Günün Dibi (PDL) kırılımı ve retesti teyidi."
+
+    # 6. Yapısal Swing High / Low Kırılımı
+    elif strat_id == 'swing_hl_breakout_retest':
+        max_bars = 30
+        risk = max(curr_atr * 1.5, entry_p * 0.013)
+        if direction == 'LONG':
+            sl = entry_p - risk
+            tp1 = round(entry_p + curr_atr * 2.0, 4)
+            tp2 = round(entry_p + curr_atr * 3.5, 4)
+            tp3 = round(entry_p + curr_atr * 5.0, 4)
+            entry_desc = "Yapısal Swing High kırılımı ve retest desteği."
+        else:
+            sl = entry_p + risk
+            tp1 = round(entry_p - curr_atr * 2.0, 4)
+            tp2 = round(entry_p - curr_atr * 3.5, 4)
+            tp3 = round(entry_p - curr_atr * 5.0, 4)
+            entry_desc = "Yapısal Swing Low kırılımı ve retest direnci."
+
+    # 7. EMA Ribbon Trend Takibi (Dinamik EMA50 Trailing Stop & 120+ Bar Sürme)
+    elif strat_id == 'ema_ribbon':
+        max_bars = 120
+        use_trailing = True
+        if direction == 'LONG':
+            ema50_val = float(curr_bar.get('ema_50', entry_p * 0.98))
+            sl = round(min(entry_p * 0.97, ema50_val - curr_atr * 0.5), 4)
+            tp1 = round(entry_p + curr_atr * 2.0, 4)
+            tp2 = round(entry_p + curr_atr * 4.0, 4)
+            tp3 = round(entry_p + curr_atr * 8.0, 4)
+            entry_desc = "EMA20 > EMA50 > EMA200 boğa hizalamasında trend takibi ve EMA50 izleyen stop."
+        else:
+            ema50_val = float(curr_bar.get('ema_50', entry_p * 1.02))
+            sl = round(max(entry_p * 1.03, ema50_val + curr_atr * 0.5), 4)
+            tp1 = round(entry_p - curr_atr * 2.0, 4)
+            tp2 = round(entry_p - curr_atr * 4.0, 4)
+            tp3 = round(entry_p - curr_atr * 8.0, 4)
+            entry_desc = "EMA20 < EMA50 < EMA200 ayı hizalamasında trend takibi ve EMA50 izleyen stop."
+
+    # 8. RSI Uyumsuzluğu (Hızlı Mean-Reversion Scalp)
+    elif strat_id == 'rsi_divergence':
+        max_bars = 16
+        risk = max(curr_atr * 1.2, entry_p * 0.010)
+        if direction == 'LONG':
+            sl = entry_p - risk
+            tp1 = round(entry_p + curr_atr * 1.5, 4)
+            tp2 = round(entry_p + curr_atr * 2.5, 4)
+            tp3 = round(entry_p + curr_atr * 3.8, 4)
+            entry_desc = "RSI Pozitif Uyumsuzluk teyidi ile ortalamaya dönüş (Mean-Reversion)."
+        else:
+            sl = entry_p + risk
+            tp1 = round(entry_p - curr_atr * 1.5, 4)
+            tp2 = round(entry_p - curr_atr * 2.5, 4)
+            tp3 = round(entry_p - curr_atr * 3.8, 4)
+            entry_desc = "RSI Negatif Uyumsuzluk teyidi ile ortalamaya dönüş (Mean-Reversion)."
+
+    # 9. Super Trader Çok Katmanlı Konfluens
+    else:
+        max_bars = 40
+        risk = max(curr_atr * 1.6, entry_p * 0.012)
+        if direction == 'LONG':
+            sl = entry_p - risk
+            tp1 = round(entry_p + risk * 1.5, 4)
+            tp2 = round(entry_p + risk * 2.5, 4)
+            tp3 = round(entry_p + risk * 4.0, 4)
+            entry_desc = "Çok katmanlı kurumsal konfluens ve SMC onayı."
+        else:
+            sl = entry_p + risk
+            tp1 = round(entry_p - risk * 1.5, 4)
+            tp2 = round(entry_p - risk * 2.5, 4)
+            tp3 = round(entry_p - risk * 4.0, 4)
+            entry_desc = "Çok katmanlı ayı konfluensi ve SMC onayı."
+
+    return {
+        'entry_p': entry_p,
+        'sl': round(sl, 4),
+        'tp1': round(tp1, 4),
+        'tp2': round(tp2, 4),
+        'tp3': round(tp3, 4),
+        'max_bars': max_bars,
+        'use_trailing': use_trailing,
+        'entry_desc': entry_desc
+    }
+
 def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", lookback: int = 500, candle_limit: Optional[int] = None, **kwargs) -> Dict[str, Any]:
     """
     Belirli bir kripto paritesi için geçmiş piyasa verileri üzerinde tüm 12 stratejiyi
@@ -262,28 +460,27 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
         elif short_count >= 2:
             signals_triggered.append(('super_confluence', 'SHORT', curr_price))
 
-        # Sinyalleri İleriye Doğru Simüle Et (TP1, TP2, TP3 Olasılık Matrisi)
+        # Sinyalleri İleriye Doğru Simüle Et (Stratejiye Özel Kurallar ile)
         for strat_id, direction, entry_level in signals_triggered:
             res = strategy_results[strat_id]
-            if res['trades'] and (idx - res['trades'][-1]['entry_index']) < 5:
+            if res['trades'] and (idx - res['trades'][-1]['entry_index']) < 4:
                 continue
 
-            entry_p = curr_price
-            risk = max(entry_p * 0.012, curr_atr * 1.6)
-            
-            # Kademeli TP Seviyeleri: TP1 (1:1.0), TP2 (1:2.0), TP3 (1:3.5)
-            if direction == 'LONG':
-                sl = entry_p - risk
-                tp1 = entry_p + risk * 1.0
-                tp2 = entry_p + risk * 2.0
-                tp3 = entry_p + risk * 3.5
-            else:
-                sl = entry_p + risk
-                tp1 = entry_p - risk * 1.0
-                tp2 = entry_p - risk * 2.0
-                tp3 = entry_p - risk * 3.5
+            t_params = _get_strategy_trade_params(
+                strat_id, direction, curr_price, curr_atr, curr_bar,
+                smc, div, patterns, df_enriched, idx
+            )
 
-            future_candles = df_enriched.iloc[idx+1: min(n, idx + 25)]
+            entry_p = t_params['entry_p']
+            sl = t_params['sl']
+            tp1 = t_params['tp1']
+            tp2 = t_params['tp2']
+            tp3 = t_params['tp3']
+            max_bars = t_params['max_bars']
+            use_trailing = t_params['use_trailing']
+            entry_desc = t_params['entry_desc']
+
+            future_candles = df_enriched.iloc[idx+1: min(n, idx + max_bars + 1)]
             is_win = False
             exit_price = entry_p
             exit_index = idx + 1
@@ -298,6 +495,7 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
             for f_idx, f_row in future_candles.iterrows():
                 f_high = float(f_row['high'])
                 f_low = float(f_row['low'])
+                f_close = float(f_row['close'])
                 f_time = int(f_row['timestamp']) // 1000 if 'timestamp' in f_row else f_idx
 
                 if direction == 'LONG':
@@ -305,15 +503,25 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
                     if f_high >= tp2: hit_tp2 = True
                     if f_high >= tp3: hit_tp3 = True
 
-                    # Intra-candle: if both SL and TP2 hit in same candle, assume 50/50 — use candle body midpoint heuristic
+                    # Trailing Stop Check (EMA Ribbon Trend Takibi)
+                    if use_trailing and hit_tp1:
+                        f_ema50 = float(f_row.get('ema_50', 0.0))
+                        if f_ema50 > 0 and f_close < f_ema50:
+                            exit_price = f_close
+                            pnl_pct = round((exit_price - entry_p) / entry_p * 100.0, 2)
+                            exit_index = f_idx
+                            exit_time = f_time
+                            is_win = pnl_pct > 0
+                            exit_reason = 'TRAILING_EMA50'
+                            break
+
                     sl_hit = f_low <= sl
                     tp2_hit = f_high >= tp2
                     if sl_hit and tp2_hit:
-                        # Wick from both sides: conservatively treat as SL (realistic worst-case)
                         candle_range = f_high - f_low
                         sl_dist = abs(f_low - sl)
                         tp_dist = abs(f_high - tp2)
-                        if sl_dist <= tp_dist:  # SL was closer to open/body
+                        if sl_dist <= tp_dist:
                             exit_price = sl
                             pnl_pct = -round((entry_p - sl) / entry_p * 100.0, 2)
                             exit_index = f_idx
@@ -328,6 +536,8 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
                             exit_time = f_time
                             is_win = True
                             exit_reason = 'TP2'
+                            if not use_trailing:
+                                break
                     elif sl_hit and not hit_tp1:
                         exit_price = sl
                         pnl_pct = -round((entry_p - sl) / entry_p * 100.0, 2)
@@ -336,13 +546,14 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
                         is_win = False
                         exit_reason = 'SL'
                         break
-                    elif tp2_hit and exit_reason == 'PENDING':
+                    elif tp2_hit and exit_reason == 'PENDING' and not use_trailing:
                         exit_price = tp2
                         pnl_pct = round((tp2 - entry_p) / entry_p * 100.0, 2)
                         exit_index = f_idx
                         exit_time = f_time
                         is_win = True
                         exit_reason = 'TP2'
+                        break
                     elif sl_hit:
                         if exit_reason == 'PENDING':
                             exit_price = sl
@@ -356,6 +567,18 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
                     if f_low <= tp1: hit_tp1 = True
                     if f_low <= tp2: hit_tp2 = True
                     if f_low <= tp3: hit_tp3 = True
+
+                    # Trailing Stop Check (EMA Ribbon Trend Takibi)
+                    if use_trailing and hit_tp1:
+                        f_ema50 = float(f_row.get('ema_50', 0.0))
+                        if f_ema50 > 0 and f_close > f_ema50:
+                            exit_price = f_close
+                            pnl_pct = round((entry_p - exit_price) / entry_p * 100.0, 2)
+                            exit_index = f_idx
+                            exit_time = f_time
+                            is_win = pnl_pct > 0
+                            exit_reason = 'TRAILING_EMA50'
+                            break
 
                     sl_hit = f_high >= sl
                     tp2_hit = f_low <= tp2
@@ -378,6 +601,8 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
                             exit_time = f_time
                             is_win = True
                             exit_reason = 'TP2'
+                            if not use_trailing:
+                                break
                     elif sl_hit and not hit_tp1:
                         exit_price = sl
                         pnl_pct = -round((sl - entry_p) / entry_p * 100.0, 2)
@@ -386,13 +611,14 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
                         is_win = False
                         exit_reason = 'SL'
                         break
-                    elif tp2_hit and exit_reason == 'PENDING':
+                    elif tp2_hit and exit_reason == 'PENDING' and not use_trailing:
                         exit_price = tp2
                         pnl_pct = round((entry_p - tp2) / entry_p * 100.0, 2)
                         exit_index = f_idx
                         exit_time = f_time
                         is_win = True
                         exit_reason = 'TP2'
+                        break
                     elif sl_hit:
                         if exit_reason == 'PENDING':
                             exit_price = sl
@@ -424,27 +650,19 @@ def run_strategy_backtest(symbol: str, df: pd.DataFrame, timeframe: str = "1h", 
             lines = [
                 {'name': 'Giriş Seviyesi (Entry)', 'price': round(entry_p, 4), 'color': '#fbbf24', 'style': 2},
                 {'name': 'Stop Loss (Zarar Durdur)', 'price': round(sl, 4), 'color': '#ef4444', 'style': 0},
-                {'name': 'TP1 (1:1 R:R Scalp)', 'price': round(tp1, 4), 'color': '#34d399', 'style': 0},
-                {'name': 'TP2 (1:2 R:R Ana Hedef)', 'price': round(tp2, 4), 'color': '#10b981', 'style': 0},
-                {'name': 'TP3 (1:3.5 R:R Trend)', 'price': round(tp3, 4), 'color': '#8b5cf6', 'style': 0},
+                {'name': 'TP1 (Kısmi Kâr Alma)', 'price': round(tp1, 4), 'color': '#34d399', 'style': 0},
+                {'name': 'TP2 (Ana Kâr Hedefi)', 'price': round(tp2, 4), 'color': '#10b981', 'style': 0},
+                {'name': 'TP3 (Maksimum Hedef)', 'price': round(tp3, 4), 'color': '#8b5cf6', 'style': 0},
             ]
 
-            explanation = f"📌 {date_str} tarihinde ${entry_p:,.4f} seviyesinden {direction} sinyali tetiklendi. "
-            if 'pdh_pdl' in strat_id:
-                explanation += f"Önceki günün seviyeleri (PDH/PDL) kırılıp test edildikten sonra onay mumu kapandı ve ${entry_p:,.4f} seviyesinden işleme girildi. "
-            elif 'order_block' in strat_id:
-                explanation += f"Fiyat kurumsal Emir Bloğu (Order Block) bölgesine retest yaptı ve tepki aldı. "
-            elif 'trendline' in strat_id:
-                explanation += f"Düşen/Yükselen trend çizgisi kırıldı ve onay mumu ile doğrulandı. "
-            elif 'rsi_divergence' in strat_id:
-                explanation += f"Fiyat ile RSI osilatörü arasındaki uyumsuzluk dönüşü başlattı. "
+            explanation = f"📌 {date_str} tarihinde ${entry_p:,.4f} seviyesinden {direction} sinyali tetiklendi. {entry_desc} "
             
             if is_win:
-                explanation += f"İşlem {exit_date_str} tarihinde ${exit_price:,.4f} seviyesinde kâr alarak (%+{pnl_pct}) başarıyla kapandı."
+                explanation += f"İşlem {exit_date_str} tarihinde ${exit_price:,.4f} seviyesinde ({exit_reason}) kâr alarak (%+{pnl_pct}) başarıyla kapandı."
             elif exit_reason == 'SL':
                 explanation += f"İşlem ${sl:,.4f} seviyesinde stop oldu (%{pnl_pct})."
             else:
-                explanation += f"İşlem 25 mumluk süre sınırında ${exit_price:,.4f} seviyesinde sonlandı (%{pnl_pct})."
+                explanation += f"İşlem {max_bars} barlık süre sınırında ${exit_price:,.4f} seviyesinde kapandı (%{pnl_pct})."
 
             # Kırılma ve Retest Zaman Damgaları
             bo_ts = int(df_enriched['timestamp'].iloc[max(0, idx - 2)] // 1000) if 'timestamp' in df_enriched.columns else int(max(0, idx - 2))

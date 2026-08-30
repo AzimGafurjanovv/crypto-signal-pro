@@ -414,21 +414,37 @@ def calculate_crypto_setup(
     direction_str = "LONG" if is_long else "SHORT"
     direction_label = f"{'🟢' if is_long else '🔴'} {score_grade} ({direction_str})"
 
-    # 🎯 EN UYGUN / BASKIN STRATEJİ BELİRLEME
+    # 🎯 EN UYGUN / BASKIN STRATEJİ BELİRLEME (Gerçek Katalizör Önceliği)
     matching_patterns = [p for p in patterns if (p['type'] == 'BULLISH' if is_long else p['type'] == 'BEARISH')]
     pattern_names = [p['name'] for p in matching_patterns]
-
-    pdh_strats = [s for s in strategies if 'PDH' in s or 'Benim' in s]
-    dominant_strats = [s for s in strategies if any(k in s for k in ['PDH', 'Benim', 'Kırılım', 'Üçgen', 'Flip', 'Range', 'Double', 'Order Block', 'OB', 'FVG', 'Likidite', 'Uyumsuzluk'])]
     
-    if pdh_strats:
-        primary_strategy = pdh_strats[0]
-    elif dominant_strats:
+    dominant_strats = []
+    # 1. Teyitli net grafik formasyonu
+    if matching_patterns:
+        dominant_strats.append(matching_patterns[0]['name'])
+    # 2. Kurumsal SMC Order Block / FVG / Likidite
+    smc_matches = [s for s in strategies if any(k in s for k in ['Order Block', 'OB', 'FVG', 'Likidite'])]
+    if smc_matches:
+        dominant_strats.append(smc_matches[0])
+    # 3. Piyasa yapısı değişimi (CHoCH / BOS)
+    struct_matches = [s for s in strategies if any(k in s for k in ['CHoCH', 'BOS'])]
+    if struct_matches:
+        dominant_strats.append(struct_matches[0])
+    # 4. RSI Uyumsuzluğu
+    div_matches = [s for s in strategies if 'Uyumsuzluk' in s]
+    if div_matches:
+        dominant_strats.append(div_matches[0])
+    # 5. EMA Trend
+    trend_matches = [s for s in strategies if 'EMA' in s]
+    if trend_matches:
+        dominant_strats.append(trend_matches[0])
+
+    if dominant_strats:
         primary_strategy = dominant_strats[0]
         if len(dominant_strats) > 1 and dominant_strats[1] != primary_strategy:
             primary_strategy += f" & {dominant_strats[1]}"
     else:
-        primary_strategy = strategies[0]
+        primary_strategy = strategies[0] if strategies else "Teknik Konfluens Hizalaması"
 
     # ─────────────────────────────────────────────────────────────────────────
     # 🛑 PROFESYONEL STOP LOSS VE TAKE PROFIT HESAPLAMASI (ATR + Swing Destek/Direnç)

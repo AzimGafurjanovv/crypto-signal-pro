@@ -53,16 +53,13 @@ def _horizontal_line(df: pd.DataFrame,
 
 def extract_alternating_zigzag(
     df: pd.DataFrame,
-    depth: int = 4,
-    deviation_pct: float = 0.6
+    depth: int = 6,
+    deviation_pct: float = 1.0
 ) -> List[Dict[str, Any]]:
     """
-    Gercek Donusumlu ZigZag (Alternating Peak/Valley Extrema).
+    Gercek Donusumlu ZigZag (Alternating Peak/Valley Extrema) — TradingView Görsel Standardı.
     
-    Her zirve mutlaka bir dipten, her dip mutlaka bir zirveden sonra gelmelidir.
-    Ardisik ayni tur noktalar gelirse daha uc olan secilir.
-    
-    Donen format: [{'type': 'peak'|'valley', 'index': int, 'price': float, 'time': int}, ...]
+    Yalnızca grafikte belirgin olarak görünen majör dalga tepeleri ve dipleri seçilir.
     """
     n = len(df)
     if n < depth * 2 + 1:
@@ -292,7 +289,8 @@ def detect_chart_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
             recency = n - 1 - latest_idx
             pattern_span = latest_idx - earliest_idx
 
-            if is_alternating and 8 <= pattern_span <= 60 and recency <= 20:
+            # TradingView Görsel Ölçeği: En az 16 bar, en fazla 80 bar
+            if is_alternating and 16 <= pattern_span <= 80 and recency <= 15:
                 slope_up = (p2['price'] - p1['price']) / max(1, p2['index'] - p1['index'])
                 slope_down = (v2['price'] - v1['price']) / max(1, v2['index'] - v1['index'])
 
@@ -302,14 +300,17 @@ def detect_chart_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 lower_start = v1['price']
                 lower_now = v1['price'] + slope_down * (n - 1 - v1['index'])
 
-                # A. SIMETRIK UCGEN: Ust cizgi asagi, Alt cizgi yukari (kesinlikle daralan)
-                if slope_up < -1e-5 and slope_down > 1e-5:
+                height = abs(p1['price'] - v1['price'])
+
+                # A. SİMETRİK ÜÇGEN: Üst çizgi aşağı, Alt çizgi yukarı (kesinlikle daralan ve en az 1.5x ATR boyunda)
+                if slope_up < -2e-5 and slope_down > 2e-5 and height >= current_atr * 1.5:
                     if upper_now > lower_now:
-                        height = abs(p1['price'] - v1['price'])
-                        is_bull = current_price >= upper_now * 0.998
-                        is_bear = current_price <= lower_now * 1.002
+                        last_c = float(df['close'].iloc[-1])
+                        last_o = float(df['open'].iloc[-1])
+                        is_bull = current_price >= upper_now * 0.999 and last_c >= last_o
+                        is_bear = current_price <= lower_now * 1.001 and last_c <= last_o
                         
-                        # Sadece gerçek kırılım varsa ekle (asla zorla BULLISH yapma)
+                        # Sadece gerçek kırılım ve mum kapanışı varsa ekle
                         if is_bull or is_bear:
                             pat_type = 'BULLISH' if is_bull else 'BEARISH'
                             bo_lvl = upper_now if is_bull else lower_now
@@ -337,8 +338,8 @@ def detect_chart_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
                                 ]
                             })
 
-                # B. YUKSELEN UCGEN (Direnc yatay, Destek yukari egimli)
-                elif abs(p2['price'] - p1['price']) / p1['price'] <= 0.015 and slope_down > 1e-5:
+                # B. YÜKSELEN ÜÇGEN (Direnç yatay, Destek yukarı eğimli)
+                elif abs(p2['price'] - p1['price']) / p1['price'] <= 0.015 and slope_down > 2e-5 and height >= current_atr * 1.5:
                     flat_res = (p1['price'] + p2['price']) / 2.0
                     height = flat_res - v1['price']
                     target = flat_res + height
@@ -360,8 +361,8 @@ def detect_chart_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
                         ]
                     })
 
-                # C. ALCALAN UCGEN (Destek yatay, Direnc asagi egimli)
-                elif slope_up < -1e-5 and abs(v2['price'] - v1['price']) / v1['price'] <= 0.015:
+                # C. ALÇALAN ÜÇGEN (Destek yatay, Direnç aşağı eğimli)
+                elif slope_up < -2e-5 and abs(v2['price'] - v1['price']) / v1['price'] <= 0.015 and height >= current_atr * 1.5:
                     flat_sup = (v1['price'] + v2['price']) / 2.0
                     height = p1['price'] - flat_sup
                     target = flat_sup - height

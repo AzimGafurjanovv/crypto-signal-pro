@@ -354,13 +354,35 @@
             </p>
         </div>
 
+        <!-- 📱 MOBİL AŞAMA GEÇİŞ SEÇİCİSİ (MOBİLDE SÜTUNLAR ARASINDA HIZLI GEÇİŞ) -->
+        <div class="lg:hidden flex items-center p-1 rounded-2xl bg-gray-950/90 border border-gray-800 gap-1 overflow-x-auto my-3 shadow-lg">
+            <button id="mobTabConfirmed" onclick="setMobileStageFilter('confirmed')" class="flex-1 py-2 px-2.5 rounded-xl bg-emerald-500/20 text-emerald-300 font-bold text-xs flex items-center justify-center gap-1.5 transition border border-emerald-500/40">
+                <i data-lucide="check-check" class="w-3.5 h-3.5"></i>
+                <span class="truncate">3. Onay</span>
+                <span id="mobBadgeConfirmed" class="px-1.5 py-0.2 rounded-full bg-emerald-500/30 text-[10px] font-mono">0</span>
+            </button>
+            <button id="mobTabRetest" onclick="setMobileStageFilter('retest')" class="flex-1 py-2 px-2.5 rounded-xl bg-gray-900 text-gray-400 font-bold text-xs flex items-center justify-center gap-1.5 transition border border-transparent">
+                <i data-lucide="crosshair" class="w-3.5 h-3.5 text-amber-400"></i>
+                <span class="truncate">2. Retest</span>
+                <span id="mobBadgeRetest" class="px-1.5 py-0.2 rounded-full bg-gray-800 text-[10px] font-mono">0</span>
+            </button>
+            <button id="mobTabBreakout" onclick="setMobileStageFilter('breakout')" class="flex-1 py-2 px-2.5 rounded-xl bg-gray-900 text-gray-400 font-bold text-xs flex items-center justify-center gap-1.5 transition border border-transparent">
+                <i data-lucide="zap" class="w-3.5 h-3.5 text-cyan-400"></i>
+                <span class="truncate">1. Kırılım</span>
+                <span id="mobBadgeBreakout" class="px-1.5 py-0.2 rounded-full bg-gray-800 text-[10px] font-mono">0</span>
+            </button>
+            <button id="mobTabAll" onclick="setMobileStageFilter('all')" class="py-2 px-3 rounded-xl bg-gray-900 text-gray-400 font-bold text-xs flex items-center justify-center gap-1 transition border border-transparent">
+                <span>Hepsi</span>
+            </button>
+        </div>
+
         <!-- 📋 3 KOLONLU KANBAN / PROGRESSION GÖRÜNÜMÜ -->
         <div id="radarContent" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-6">
 
             <!-- ---------------------------------------------------------------- -->
             <!-- ⚡ 1. KOLON: YENİ KIRILANLAR (BREAKOUT STAGE) -->
             <!-- ---------------------------------------------------------------- -->
-            <div class="space-y-4">
+            <div id="colBreakoutWrapper" class="space-y-4">
                 <div class="flex items-center justify-between p-3.5 rounded-2xl bg-gray-950/80 border border-cyan-500/30 shadow-md">
                     <div class="flex items-center gap-2">
                         <div class="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
@@ -382,7 +404,7 @@
             <!-- ---------------------------------------------------------------- -->
             <!-- 🎯 2. KOLON: RETEST YAPANLAR (RETESTING STAGE) -->
             <!-- ---------------------------------------------------------------- -->
-            <div class="space-y-4">
+            <div id="colRetestWrapper" class="space-y-4">
                 <div class="flex items-center justify-between p-3.5 rounded-2xl bg-gray-950/80 border border-amber-500/30 shadow-md">
                     <div class="flex items-center gap-2">
                         <div class="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
@@ -404,7 +426,7 @@
             <!-- ---------------------------------------------------------------- -->
             <!-- 🚀 3. KOLON: RETEST + ONAY ALANLAR (CONFIRMED ENTRY) -->
             <!-- ---------------------------------------------------------------- -->
-            <div class="space-y-4">
+            <div id="colConfirmedWrapper" class="space-y-4">
                 <div class="flex items-center justify-between p-3.5 rounded-2xl bg-gray-950/80 border border-emerald-500/40 shadow-md glow-emerald">
                     <div class="flex items-center gap-2">
                         <div class="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
@@ -662,9 +684,30 @@
         </div>
     </div>
 
+    <!-- 📱 MOBİL ALT MENÜ BARI (BOTTOM NAVIGATION BAR) -->
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-gray-950/95 backdrop-blur-xl border-t border-gray-800/90 px-3 py-2 flex items-center justify-around shadow-2xl safe-area-bottom">
+        <a href="/index.html" class="flex flex-col items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-white transition">
+            <i data-lucide="zap" class="w-4 h-4 text-gray-400"></i>
+            <span>Sinyaller</span>
+        </a>
+        <a href="/my_strategy.html" class="flex flex-col items-center gap-1 text-[10px] font-bold text-cyan-400 hover:text-cyan-300 transition">
+            <i data-lucide="crosshair" class="w-4 h-4 text-cyan-400"></i>
+            <span>Özel Strateji</span>
+        </a>
+        <a href="/backtest.html" class="flex flex-col items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-white transition">
+            <i data-lucide="flask-conical" class="w-4 h-4 text-gray-400"></i>
+            <span>Backtest</span>
+        </a>
+        <button onclick="openTelegramModal()" class="flex flex-col items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-sky-400 transition cursor-pointer">
+            <i data-lucide="bell" class="w-4 h-4"></i>
+            <span>Telegram</span>
+        </button>
+    </nav>
+    <div class="h-16 md:hidden"></div>
+
     <!-- JavaScript Dosyaları -->
-    <script src="/static/js/chart.js?v=3.1"></script>
-    <script src="/static/js/telegram.js?v=3.1"></script>
-    <script src="/static/js/my_strategy.js?v=3.1"></script>
+    <script src="/static/js/chart.js?v=3.2"></script>
+    <script src="/static/js/telegram.js?v=3.2"></script>
+    <script src="/static/js/my_strategy.js?v=3.2"></script>
 </body>
 </html>

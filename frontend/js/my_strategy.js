@@ -252,8 +252,60 @@ function applyRadarFiltersAndRender() {
     if (document.getElementById('col2BadgeCount')) document.getElementById('col2BadgeCount').textContent = rtFiltered.length;
     if (document.getElementById('col3BadgeCount')) document.getElementById('col3BadgeCount').textContent = cfFiltered.length;
 
+    if (document.getElementById('mobBadgeBreakout')) document.getElementById('mobBadgeBreakout').textContent = boFiltered.length;
+    if (document.getElementById('mobBadgeRetest')) document.getElementById('mobBadgeRetest').textContent = rtFiltered.length;
+    if (document.getElementById('mobBadgeConfirmed')) document.getElementById('mobBadgeConfirmed').textContent = cfFiltered.length;
+
+    // Apply current mobile filter state
+    applyMobileStageFilter();
+
     lucide.createIcons();
 }
+
+let activeMobileStage = 'all';
+
+function setMobileStageFilter(stage) {
+    activeMobileStage = stage;
+    applyMobileStageFilter();
+}
+
+function applyMobileStageFilter() {
+    const colBreakout = document.getElementById('colBreakoutWrapper');
+    const colRetest = document.getElementById('colRetestWrapper');
+    const colConfirmed = document.getElementById('colConfirmedWrapper');
+    if (!colBreakout || !colRetest || !colConfirmed) return;
+
+    const isMobile = window.innerWidth < 1024;
+    if (isMobile) {
+        colBreakout.style.display = (activeMobileStage === 'all' || activeMobileStage === 'breakout') ? 'block' : 'none';
+        colRetest.style.display = (activeMobileStage === 'all' || activeMobileStage === 'retest') ? 'block' : 'none';
+        colConfirmed.style.display = (activeMobileStage === 'all' || activeMobileStage === 'confirmed') ? 'block' : 'none';
+    } else {
+        colBreakout.style.display = 'block';
+        colRetest.style.display = 'block';
+        colConfirmed.style.display = 'block';
+    }
+
+    // Update active tab buttons style
+    const tabs = {
+        'confirmed': document.getElementById('mobTabConfirmed'),
+        'retest': document.getElementById('mobTabRetest'),
+        'breakout': document.getElementById('mobTabBreakout'),
+        'all': document.getElementById('mobTabAll')
+    };
+
+    Object.keys(tabs).forEach(k => {
+        const el = tabs[k];
+        if (!el) return;
+        if (k === activeMobileStage) {
+            el.className = 'flex-1 py-2 px-2.5 rounded-xl bg-cyan-500/20 text-cyan-300 font-bold text-xs flex items-center justify-center gap-1.5 transition border border-cyan-500/40 shadow-sm';
+        } else {
+            el.className = 'flex-1 py-2 px-2.5 rounded-xl bg-gray-900 text-gray-400 font-bold text-xs flex items-center justify-center gap-1.5 transition border border-transparent';
+        }
+    });
+}
+
+window.addEventListener('resize', applyMobileStageFilter);
 
 function renderColumnList(containerId, coins, type) {
     const el = document.getElementById(containerId);

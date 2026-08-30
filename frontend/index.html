@@ -1017,9 +1017,34 @@
         </div>
     </div>
 
+    <!-- 📱 MOBİL ALT MENÜ BARI (BOTTOM NAVIGATION BAR) -->
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-gray-950/95 backdrop-blur-xl border-t border-gray-800/90 px-3 py-2 flex items-center justify-around shadow-2xl safe-area-bottom">
+        <a href="/index.html" class="flex flex-col items-center gap-1 text-[10px] font-bold text-indigo-400 hover:text-indigo-300 transition">
+            <i data-lucide="zap" class="w-4 h-4 text-indigo-400"></i>
+            <span>Sinyaller</span>
+        </a>
+        <a href="/my_strategy.html" class="flex flex-col items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-cyan-400 transition">
+            <i data-lucide="crosshair" class="w-4 h-4"></i>
+            <span>Özel Strateji</span>
+        </a>
+        <a href="/backtest.html" class="flex flex-col items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-amber-400 transition">
+            <i data-lucide="flask-conical" class="w-4 h-4"></i>
+            <span>Backtest</span>
+        </a>
+        <button onclick="toggleOrOpenAiChatDrawer()" class="flex flex-col items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-indigo-300 transition cursor-pointer">
+            <i data-lucide="bot" class="w-4 h-4 text-yellow-400"></i>
+            <span>AI Chat</span>
+        </button>
+        <button onclick="openTelegramModal()" class="flex flex-col items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-sky-400 transition cursor-pointer">
+            <i data-lucide="bell" class="w-4 h-4"></i>
+            <span>Telegram</span>
+        </button>
+    </nav>
+    <div class="h-16 md:hidden"></div>
+
     <!-- SCRIPTS -->
-    <script src="/static/js/chart.js"></script>
-    <script src="/static/js/telegram.js"></script>
-    <script src="/static/js/app.js"></script>
+    <script src="/static/js/chart.js?v=3.2"></script>
+    <script src="/static/js/telegram.js?v=3.2"></script>
+    <script src="/static/js/app.js?v=3.2"></script>
 </body>
 </html>

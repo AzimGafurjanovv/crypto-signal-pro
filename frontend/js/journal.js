@@ -419,11 +419,29 @@ function renderJournalTable() {
     lucide.createIcons();
 }
 
+function getNowLocalDateTimeString() {
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+}
+
+function formatDateForDisplay(dtStr) {
+    if (!dtStr) return '';
+    return dtStr.replace('T', ' ').slice(0, 16);
+}
+
+function formatIsoToInput(dtStr) {
+    if (!dtStr) return '';
+    return dtStr.replace(' ', 'T').slice(0, 16);
+}
+
 function openNewTradeModal() {
     document.getElementById('tradeFormId').value = '';
     document.getElementById('tradeModalTitle').textContent = 'Yeni İşlem Kaydı Ekle';
     document.getElementById('tradeForm').reset();
     document.getElementById('tradeLivePriceText').textContent = '';
+    document.getElementById('tradeFormEntryDate').value = getNowLocalDateTimeString();
+    document.getElementById('tradeFormExitDate').value = '';
     document.getElementById('tradeModal').classList.remove('hidden');
     document.getElementById('tradeModal').classList.add('flex');
 
@@ -449,6 +467,8 @@ function openEditTradeModal(tradeId) {
     document.getElementById('tradeFormExit').value = trade.exit_price || '';
     document.getElementById('tradeFormStrategy').value = trade.strategy || 'Kişisel Analiz';
     document.getElementById('tradeFormNotes').value = trade.notes || '';
+    document.getElementById('tradeFormEntryDate').value = formatIsoToInput(trade.entry_date_str) || getNowLocalDateTimeString();
+    document.getElementById('tradeFormExitDate').value = formatIsoToInput(trade.exit_date_str) || '';
     document.getElementById('tradeLivePriceText').textContent = '';
 
     document.getElementById('tradeModal').classList.remove('hidden');
@@ -464,6 +484,9 @@ async function handleTradeFormSubmit(e) {
     e.preventDefault();
     const tradeId = document.getElementById('tradeFormId').value;
     
+    const entryDateInput = document.getElementById('tradeFormEntryDate').value;
+    const exitDateInput = document.getElementById('tradeFormExitDate').value;
+
     const payload = {
         symbol: document.getElementById('tradeFormSymbol').value.toUpperCase().trim(),
         direction: document.getElementById('tradeFormDirection').value,
@@ -474,7 +497,9 @@ async function handleTradeFormSubmit(e) {
         status: document.getElementById('tradeFormStatus').value,
         exit_price: parseFloat(document.getElementById('tradeFormExit').value) || null,
         strategy: document.getElementById('tradeFormStrategy').value,
-        notes: document.getElementById('tradeFormNotes').value
+        notes: document.getElementById('tradeFormNotes').value,
+        entry_date_str: formatDateForDisplay(entryDateInput) || new Date().toISOString().slice(0, 16).replace('T', ' '),
+        exit_date_str: formatDateForDisplay(exitDateInput) || null
     };
 
     try {

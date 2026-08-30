@@ -1,22 +1,20 @@
 """
-CryptoSignalPro AI - PDH / PDL (Previous Day High / Low) Strategy Engine (v10.0.0)
+CryptoSignalPro AI - PDH / PDL (Previous Day High / Low) Strategy Engine (v11.0.0)
 
-Strict rule-based detector implementing professional institutional rules:
+Strict UTC Calendar Day (00:00 - 23:59 UTC) Architecture:
 1. Reference levels (PDH & PDL):
-   - Strict UTC Daily boundaries (00:00 to 23:59 UTC of the previous 24h cycle).
-2. 1H Breakout / Breakdown:
-   - Long: Candle close > PDH in recent 12 bars.
-   - Short: Candle close < PDL in recent 12 bars.
-3. 1H Retest:
-   - Tolerance: 0.35 * ATR(14).
-   - Long: Low <= PDH + tolerance AND Close >= PDH - 0.7 * tolerance.
-   - Short: High >= PDL - tolerance AND Close <= PDL + 0.7 * tolerance.
-4. 1H Confirmation:
-   - Directional Engulfing OR Strong Body (>= 45% of range) + Volume >= 80% 20SMA.
-5. Liquidity Sweep & Reclaim (SFP / Turtle Soup):
+   - High and Low of yesterday's true UTC calendar day (00:00 UTC to 23:59 UTC).
+   - Consistent across 15m, 1h, 4h timeframes.
+2. Current Day Candles:
+   - Evaluates all candles since 00:00 UTC today.
+3. Breakout, Retest & Pullback Model:
+   - Breakout: Close > PDH (Long) or Close < PDL (Short).
+   - Retest: Touch (0.6xATR) OR Minor Pullback (%30-%60 retracement) OR Consolidation Flag.
+   - Confirmation: Bullish/Bearish directional candle.
+4. Liquidity Sweep (SFP / Turtle Soup):
    - Wick beyond PDH/PDL and close back inside the daily range.
-6. Daily Extreme Test (Approaching / Testing):
-   - Price within 1.5% of PDH or PDL.
+5. Daily Extreme Test (Approaching):
+   - Price within 1.8% of PDH or PDL.
 """
 
 import math
@@ -35,7 +33,7 @@ def evaluate_pdh_pdl_exact(
     df: pd.DataFrame,
     timeframe: str = "1h"
 ) -> Dict[str, Any]:
-    if df is None or len(df) < 30:
+    if df is None or len(df) < 20:
         return {
             "status": "INVALID",
             "direction": None,
@@ -63,13 +61,28 @@ def evaluate_pdh_pdl_exact(
     current_price = float(df['close'].iloc[-1])
     current_atr = float(df['atr'].iloc[-1]) if not np.isnan(df['atr'].iloc[-1]) else (current_price * 0.015)
 
-    # 1. Previous Day High & Low calculation (24-48h ago vs last 24h)
-    lookback_pd = 24 if n >= 48 else max(12, n // 2)
-    prev_day_slice = df.iloc[-lookback_pd*2 : -lookback_pd]
-    curr_slice = df.iloc[-lookback_pd:]
+    # 1. Strict UTC Calendar Day Grouping
+    ts_list = [int(t)//1000 if int(t) > 1e12 else int(t) for t in df['timestamp'].values] if 'timestamp' in df.columns else list(range(n))
+    dt_list = [datetime.fromtimestamp(t, tz=timezone.utc) for t in ts_list]
+    df['utc_date'] = [d.date() for d in dt_list]
+    dates = sorted(df['utc_date'].unique())
 
-    prev_day_high = float(prev_day_slice['high'].max())
-    prev_day_low = float(prev_day_slice['low'].min())
+    if len(dates) >= 2:
+        today_date = dates[-1]
+        yesterday_date = dates[-2]
+
+        df_yesterday = df[df['utc_date'] == yesterday_date]
+        df_today = df[df['utc_date'] == today_date]
+
+        prev_day_high = float(df_yesterday['high'].max())
+        prev_day_low = float(df_yesterday['low'].min())
+        curr_slice = df_today if len(df_today) >= 2 else df.iloc[-12:]
+    else:
+        lookback = 24 if timeframe == "1h" else (96 if timeframe == "15m" else 6)
+        prev_day_slice = df.iloc[max(0, n - lookback * 2) : max(1, n - lookback)]
+        prev_day_high = float(prev_day_slice['high'].max()) if len(prev_day_slice) > 0 else current_price * 1.02
+        prev_day_low = float(prev_day_slice['low'].min()) if len(prev_day_slice) > 0 else current_price * 0.98
+        curr_slice = df.iloc[-lookback:]
 
     highs = curr_slice['high'].values
     lows = curr_slice['low'].values
@@ -91,7 +104,7 @@ def evaluate_pdh_pdl_exact(
 
     m = len(curr_slice)
 
-    # --- A. CHECK LONG (PDH Breakout & Retest) ---
+    # --- A. CHECK LONG (PDH Breakout & Retest / PDL Sweep Reclaim) ---
     long_eval = _check_long_pdh(
         symbol, timeframe, prev_day_high, prev_day_low,
         highs, lows, opens, closes, volumes, vol_sma20, atrs,
@@ -99,7 +112,7 @@ def evaluate_pdh_pdl_exact(
         current_price, current_atr, m
     )
 
-    # --- B. CHECK SHORT (PDL Breakdown & Retest) ---
+    # --- B. CHECK SHORT (PDL Breakdown & Retest / PDH Sweep Reject) ---
     short_eval = _check_short_pdl(
         symbol, timeframe, prev_day_high, prev_day_low,
         highs, lows, opens, closes, volumes, vol_sma20, atrs,
@@ -107,10 +120,8 @@ def evaluate_pdh_pdl_exact(
         current_price, current_atr, m
     )
 
-    # Return confirmed > retesting > breakout > sweep > testing
     evals = [e for e in [long_eval, short_eval] if e and e.get("status") != "INVALID"]
     if evals:
-        # Priority order
         prio = {"CONFIRMED": 3, "RETESTING": 2, "BREAKOUT": 1}
         evals.sort(key=lambda x: prio.get(x["status"], 0), reverse=True)
         return evals[0]
@@ -120,7 +131,6 @@ def evaluate_pdh_pdl_exact(
     dist_pdl_pct = abs(current_price - prev_day_low) / current_price * 100
 
     if dist_pdh_pct <= 1.8:
-        # Long Approach to PDH
         sl = round(current_price - 1.5 * current_atr, 4)
         tp = round(prev_day_high + 2.0 * current_atr, 4)
         risk = max(current_atr * 0.25, current_price - sl)
@@ -149,7 +159,6 @@ def evaluate_pdh_pdl_exact(
             "confirmed_bar": None
         }
     elif dist_pdl_pct <= 1.8:
-        # Short Approach to PDL
         sl = round(current_price + 1.5 * current_atr, 4)
         tp = round(prev_day_low - 2.0 * current_atr, 4)
         risk = max(current_atr * 0.25, sl - current_price)
@@ -199,7 +208,6 @@ def evaluate_pdh_pdl_exact(
 
 
 def _check_long_pdh(symbol, timeframe, pdh, pdl, highs, lows, opens, closes, volumes, vol_sma20, atrs, timestamps, iso_times, time_strs, current_price, current_atr, m):
-    # Check fresh breakout in last 12 bars
     bo_idx = None
     search_start = max(0, m - 12)
     for k in range(search_start, m):
@@ -207,7 +215,7 @@ def _check_long_pdh(symbol, timeframe, pdh, pdl, highs, lows, opens, closes, vol
             bo_idx = k
             break
 
-    # Liquidity Sweep check (Wick above PDH & close below -> Bearish Reversal or Wick below PDL & close above -> Bullish Reversal)
+    # Liquidity Sweep check
     sweep_pdl_idx = None
     for k in range(max(0, m - 6), m):
         if lows[k] < pdl and closes[k] >= pdl:
@@ -215,7 +223,6 @@ def _check_long_pdh(symbol, timeframe, pdh, pdl, highs, lows, opens, closes, vol
             break
 
     if sweep_pdl_idx is not None and bo_idx is None:
-        # Bullish SFP / Sweep Reclaim
         sl = round(lows[sweep_pdl_idx] - 0.25 * current_atr, 4)
         tp = round(pdh, 4)
         risk = max(current_atr * 0.25, current_price - sl)
@@ -249,16 +256,24 @@ def _check_long_pdh(symbol, timeframe, pdh, pdl, highs, lows, opens, closes, vol
         return None
 
     bo_bar = {'timestamp': timestamps[bo_idx], 'time_str': time_strs[bo_idx], 'close': float(closes[bo_idx])}
-    tolerance = 0.35 * atrs[bo_idx]
+    tolerance = 0.50 * atrs[bo_idx]
 
-    # Retest check (between bo_idx + 1 and min(m, bo_idx + 9))
     retest_idx = None
     max_retest_limit = min(m, bo_idx + 9)
+    max_high_post_bo = highs[bo_idx]
+
     for k in range(bo_idx + 1, max_retest_limit):
-        k_tol = 0.35 * atrs[k]
+        k_tol = 0.50 * atrs[k]
+        max_high_post_bo = max(max_high_post_bo, highs[k])
+
         if closes[k] < (pdh - k_tol * 1.5):
-            return None # Failed breakout
-        if lows[k] <= (pdh + k_tol) and closes[k] >= (pdh - k_tol * 0.7):
+            return None
+
+        cond_touch = (lows[k] <= pdh + k_tol * 1.2) and (closes[k] >= pdh - k_tol * 0.7)
+        cond_pullback = (lows[k] <= max_high_post_bo - 0.35 * atrs[k]) and (closes[k] >= pdh - k_tol * 0.5)
+        cond_flag = (closes[k] < opens[k]) and (closes[k] >= pdh - k_tol * 0.3)
+
+        if cond_touch or cond_pullback or cond_flag:
             retest_idx = k
             break
 
@@ -294,16 +309,15 @@ def _check_long_pdh(symbol, timeframe, pdh, pdl, highs, lows, opens, closes, vol
 
     rt_bar = {'timestamp': timestamps[retest_idx], 'time_str': time_strs[retest_idx], 'low': float(lows[retest_idx]), 'high': float(highs[retest_idx])}
 
-    # Confirmation check
     conf_idx = None
-    for k in range(retest_idx, min(m, retest_idx + 3)):
+    for k in range(retest_idx, min(m, retest_idx + 4)):
         c = closes[k]
         o = opens[k]
         rng = max(0.0001, highs[k] - lows[k])
         body = abs(c - o)
         has_eng = (k > 0 and c > o and closes[k-1] < opens[k-1] and c >= opens[k-1])
-        has_strong = (c > o and body >= 0.45 * rng)
-        if (has_eng or has_strong) and c >= pdh:
+        has_strong = (c > o and body >= 0.38 * rng)
+        if (has_eng or has_strong) and c >= pdh - tolerance * 0.5:
             conf_idx = k
             break
 
@@ -334,7 +348,7 @@ def _check_long_pdh(symbol, timeframe, pdh, pdl, highs, lows, opens, closes, vol
             "retest_bar": rt_bar,
             "confirmed_bar": conf_bar
         }
-    elif m - 1 - retest_idx <= 3:
+    elif m - 1 - retest_idx <= 2:
         return {
             "status": "RETESTING",
             "direction": "LONG",
@@ -362,7 +376,6 @@ def _check_long_pdh(symbol, timeframe, pdh, pdl, highs, lows, opens, closes, vol
 
 
 def _check_short_pdl(symbol, timeframe, pdh, pdl, highs, lows, opens, closes, volumes, vol_sma20, atrs, timestamps, iso_times, time_strs, current_price, current_atr, m):
-    # Check fresh breakdown in last 12 bars
     bo_idx = None
     search_start = max(0, m - 12)
     for k in range(search_start, m):
@@ -370,7 +383,6 @@ def _check_short_pdl(symbol, timeframe, pdh, pdl, highs, lows, opens, closes, vo
             bo_idx = k
             break
 
-    # Liquidity Sweep check (Wick above PDH & close below -> Bearish SFP)
     sweep_pdh_idx = None
     for k in range(max(0, m - 6), m):
         if highs[k] > pdh and closes[k] <= pdh:
@@ -378,7 +390,6 @@ def _check_short_pdl(symbol, timeframe, pdh, pdl, highs, lows, opens, closes, vo
             break
 
     if sweep_pdh_idx is not None and bo_idx is None:
-        # Bearish SFP / Sweep Reclaim
         sl = round(highs[sweep_pdh_idx] + 0.25 * current_atr, 4)
         tp = round(pdl, 4)
         risk = max(current_atr * 0.25, sl - current_price)
@@ -412,16 +423,24 @@ def _check_short_pdl(symbol, timeframe, pdh, pdl, highs, lows, opens, closes, vo
         return None
 
     bo_bar = {'timestamp': timestamps[bo_idx], 'time_str': time_strs[bo_idx], 'close': float(closes[bo_idx])}
-    tolerance = 0.35 * atrs[bo_idx]
+    tolerance = 0.50 * atrs[bo_idx]
 
-    # Retest check (between bo_idx + 1 and min(m, bo_idx + 9))
     retest_idx = None
     max_retest_limit = min(m, bo_idx + 9)
+    min_low_post_bo = lows[bo_idx]
+
     for k in range(bo_idx + 1, max_retest_limit):
-        k_tol = 0.35 * atrs[k]
+        k_tol = 0.50 * atrs[k]
+        min_low_post_bo = min(min_low_post_bo, lows[k])
+
         if closes[k] > (pdl + k_tol * 1.5):
-            return None # Failed breakdown
-        if highs[k] >= (pdl - k_tol) and closes[k] <= (pdl + k_tol * 0.7):
+            return None
+
+        cond_touch = (highs[k] >= pdl - k_tol * 1.2) and (closes[k] <= pdl + k_tol * 0.7)
+        cond_pullback = (highs[k] >= min_low_post_bo + 0.35 * atrs[k]) and (closes[k] <= pdl + k_tol * 0.5)
+        cond_flag = (closes[k] > opens[k]) and (closes[k] <= pdl + k_tol * 0.3)
+
+        if cond_touch or cond_pullback or cond_flag:
             retest_idx = k
             break
 
@@ -457,16 +476,15 @@ def _check_short_pdl(symbol, timeframe, pdh, pdl, highs, lows, opens, closes, vo
 
     rt_bar = {'timestamp': timestamps[retest_idx], 'time_str': time_strs[retest_idx], 'low': float(lows[retest_idx]), 'high': float(highs[retest_idx])}
 
-    # Confirmation check
     conf_idx = None
-    for k in range(retest_idx, min(m, retest_idx + 3)):
+    for k in range(retest_idx, min(m, retest_idx + 4)):
         c = closes[k]
         o = opens[k]
         rng = max(0.0001, highs[k] - lows[k])
         body = abs(c - o)
         has_eng = (k > 0 and c < o and closes[k-1] > opens[k-1] and c <= opens[k-1])
-        has_strong = (c < o and body >= 0.45 * rng)
-        if (has_eng or has_strong) and c <= pdl:
+        has_strong = (c < o and body >= 0.38 * rng)
+        if (has_eng or has_strong) and c <= pdl + tolerance * 0.5:
             conf_idx = k
             break
 
@@ -497,7 +515,7 @@ def _check_short_pdl(symbol, timeframe, pdh, pdl, highs, lows, opens, closes, vo
             "retest_bar": rt_bar,
             "confirmed_bar": conf_bar
         }
-    elif m - 1 - retest_idx <= 3:
+    elif m - 1 - retest_idx <= 2:
         return {
             "status": "RETESTING",
             "direction": "SHORT",
@@ -527,7 +545,7 @@ def _check_short_pdl(symbol, timeframe, pdh, pdl, highs, lows, opens, closes, vo
 def _build_pdh_checklist(direction: str, pdh: float, pdl: float, bo_bar: Optional[Dict], rt_bar: Optional[Dict], conf_bar: Optional[Dict], has_confirmed: bool, atr: float, conf_detail: Optional[str], mode: str = "Breakout") -> List[Dict[str, Any]]:
     level_name = f"Dünün {'Zirvesi (PDH)' if direction == 'LONG' else 'Dibi (PDL)'}"
     level_price = pdh if direction == "LONG" else pdl
-    tol = 0.35 * atr
+    tol = 0.50 * atr
 
     return [
         {
@@ -538,13 +556,13 @@ def _build_pdh_checklist(direction: str, pdh: float, pdl: float, bo_bar: Optiona
         },
         {
             "step": 2,
-            "title": f"2. 0.35xATR Tolerans (${tol:,.4f}) ile Seviye Testi / Retest",
+            "title": f"2. Retest / Geri Çekilme & 0.50xATR Tolerans (${tol:,.4f})",
             "passed": rt_bar is not None,
-            "detail": f"Saat {rt_bar['time_str']} barında seviye test edildi ve tutundu." if rt_bar else "Seviye temas veya geri çekilme (retest) bekleniyor."
+            "detail": f"Saat {rt_bar['time_str']} barında sağlıklı geri çekilme/retest yapıldı." if rt_bar else "Seviye temas veya sağlıklı geri çekilme (pullback) bekleniyor."
         },
         {
             "step": 3,
-            "title": "3. 1H Onay Mumu (Engulfing veya Gövde >= %45)",
+            "title": "3. 1H Onay Mumu (Yönlü Gövde >= %38)",
             "passed": has_confirmed and conf_bar is not None,
             "detail": f"Saat {conf_bar['time_str']} barında onaylandı ({conf_detail})." if conf_bar else "Hacimli yönlü onay mumu bekleniyor."
         },
@@ -569,7 +587,7 @@ def run_pdh_pdl_radar(timeframe: str = "1h", limit_coins: int = 50) -> Dict[str,
     def _eval(sym):
         try:
             df = market_manager.get_market_data(sym, timeframe=timeframe, limit=100)
-            if df is not None and len(df) >= 30:
+            if df is not None and len(df) >= 20:
                 res = evaluate_pdh_pdl_exact(sym, df, timeframe=timeframe)
                 if res and res.get("status") in ["BREAKOUT", "RETESTING", "CONFIRMED"]:
                     strat_name = res.get("strategy_sub") or f"PDH / PDL Günlük {'Zirve' if res['direction'] == 'LONG' else 'Dip'}"

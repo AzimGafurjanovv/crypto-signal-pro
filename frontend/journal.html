@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="tr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Trade Günlüğü & Not Alarm Masası | CryptoSignalPro AI</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- TradingView Lightweight Charts v4 -->
+    <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="bg-[#080c14] text-gray-100 min-h-screen flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+
+    <!-- 🔝 ÜST NAVBAR -->
+    <header class="border-b border-gray-800/80 bg-gray-900/80 backdrop-blur-xl sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <a href="/index.html" class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-indigo-500/20 active:scale-95 transition">
+                    <i data-lucide="book-open" class="w-6 h-6 text-white"></i>
+                </a>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-bold bg-gradient-to-r from-white via-gray-200 to-indigo-400 bg-clip-text text-transparent flex items-center gap-2">
+                        <span>Trade Günlüğü & Notlar</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 font-semibold border border-indigo-500/30">PRO</span>
+                    </h1>
+                    <p class="text-xs text-gray-400 hidden sm:block">Pozisyon Takibi, Performans Analizi & Fiyat Hedef Alarmları</p>
+                </div>
+            </div>
+
+            <!-- Sağ Hızlı Butonlar -->
+            <div class="flex items-center space-x-2">
+                <a href="/index.html" class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-800/80 hover:bg-gray-800 text-gray-300 text-xs font-bold transition border border-gray-700">
+                    <i data-lucide="zap" class="w-3.5 h-3.5 text-indigo-400"></i>
+                    <span>Sinyaller</span>
+                </a>
+                <a href="/my_strategy.html" class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-800/80 hover:bg-gray-800 text-gray-300 text-xs font-bold transition border border-gray-700">
+                    <i data-lucide="crosshair" class="w-3.5 h-3.5 text-cyan-400"></i>
+                    <span>Özel Strateji</span>
+                </a>
+                <a href="/backtest.html" class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-800/80 hover:bg-gray-800 text-gray-300 text-xs font-bold transition border border-gray-700">
+                    <i data-lucide="flask-conical" class="w-3.5 h-3.5 text-amber-400"></i>
+                    <span>Backtest</span>
+                </a>
+                <button onclick="openTelegramModal()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-sky-300 text-xs font-bold transition shadow-sm cursor-pointer">
+                    <i data-lucide="bell" class="w-3.5 h-3.5"></i>
+                    <span class="hidden sm:inline">Telegram Bildirim</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 🌟 ANA İÇERİK KONTEYNERİ -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- 🎛️ ANA SEKME DEĞİŞTİRİCİ (TAB SWITCHER) -->
+        <div class="flex items-center p-1.5 rounded-2xl bg-gray-950/90 border border-gray-800 shadow-xl max-w-md mx-auto">
+            <button id="tabJournalBtn" onclick="switchMainTab('journal')" class="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition shadow-md border border-indigo-400/40">
+                <i data-lucide="book-marked" class="w-4 h-4 text-indigo-200"></i>
+                <span>📖 1. Trade Günlüğü</span>
+            </button>
+            <button id="tabNotesBtn" onclick="switchMainTab('notes')" class="flex-1 py-2.5 px-4 rounded-xl text-gray-400 hover:text-white font-bold text-xs flex items-center justify-center gap-2 transition border border-transparent">
+                <i data-lucide="bell-ring" class="w-4 h-4 text-amber-400"></i>
+                <span>📝 2. Trade Notları & Alarmlar</span>
+            </button>
+        </div>
+
+        <!-- ============================================================= -->
+        <!-- 📖 SEKME 1: TRADE GÜNLÜĞÜ (TRADING JOURNAL) -->
+        <!-- ============================================================= -->
+        <section id="sectionJournal" class="space-y-6">
+
+            <!-- 📊 PERFORMANS & KPI ÖZET KARTLARI -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div class="glass-panel p-3.5 rounded-2xl border border-gray-800 text-center">
+                    <div class="text-[10px] text-gray-400 font-sans">TOPLAM İŞLEM</div>
+                    <div id="statTotalTrades" class="text-xl sm:text-2xl font-black text-white font-mono mt-0.5">0</div>
+                    <div class="text-[9px] text-gray-500 font-sans">Kayıtlı Pozisyon</div>
+                </div>
+
+                <div class="glass-panel p-3.5 rounded-2xl border border-cyan-500/30 text-center">
+                    <div class="text-[10px] text-cyan-300 font-sans">AÇIK İŞLEMLER</div>
+                    <div id="statOpenTrades" class="text-xl sm:text-2xl font-black text-cyan-400 font-mono mt-0.5">0</div>
+                    <div class="text-[9px] text-cyan-400/70 font-sans">Canlı Takipte</div>
+                </div>
+
+                <div class="glass-panel p-3.5 rounded-2xl border border-emerald-500/30 text-center glow-emerald">
+                    <div class="text-[10px] text-emerald-300 font-sans">KAZANMA ORANI (WIN)</div>
+                    <div id="statWinRate" class="text-xl sm:text-2xl font-black text-emerald-400 font-mono mt-0.5">%0.0</div>
+                    <div id="statWinCount" class="text-[9px] text-emerald-400/80 font-sans">0 Kazanç / 0 Kayıp</div>
+                </div>
+
+                <div class="glass-panel p-3.5 rounded-2xl border border-indigo-500/30 text-center glow-indigo">
+                    <div class="text-[10px] text-indigo-300 font-sans">NET KÂR / ZARAR (%)</div>
+                    <div id="statTotalPnlPct" class="text-xl sm:text-2xl font-black text-indigo-300 font-mono mt-0.5">%0.0</div>
+                    <div id="statTotalPnlAmount" class="text-[9px] text-gray-400 font-mono">$0.00 Net</div>
+                </div>
+
+                <div class="glass-panel p-3.5 rounded-2xl border border-amber-500/30 text-center">
+                    <div class="text-[10px] text-amber-300 font-sans">KÂR FAKTÖRÜ (PF)</div>
+                    <div id="statProfitFactor" class="text-xl sm:text-2xl font-black text-amber-400 font-mono mt-0.5">0.00</div>
+                    <div class="text-[9px] text-amber-400/70 font-sans">Kazanç/Kayıp Oranı</div>
+                </div>
+
+                <div class="glass-panel p-3.5 rounded-2xl border border-purple-500/30 text-center">
+                    <div class="text-[10px] text-purple-300 font-sans">ORTALAMA R:R</div>
+                    <div id="statAvgRR" class="text-xl sm:text-2xl font-black text-purple-400 font-mono mt-0.5">0.0 R</div>
+                    <div class="text-[9px] text-purple-400/70 font-sans">Planlanan Risk/Ödül</div>
+                </div>
+            </div>
+
+            <!-- 🎛️ FİLTRELEME & İŞLEM EKLEME ÇUBUĞU -->
+            <div class="glass-panel rounded-2xl border border-gray-800 p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-xl">
+                <div class="flex flex-wrap items-center gap-2">
+                    <!-- Durum Filtre Butonları -->
+                    <div class="flex items-center p-1 rounded-xl bg-gray-950 border border-gray-800 text-xs font-bold gap-1 overflow-x-auto">
+                        <button onclick="filterJournalByStatus('ALL')" class="journal-filter-btn px-3 py-1.5 rounded-lg bg-indigo-600 text-white transition" data-status="ALL">Tümü</button>
+                        <button onclick="filterJournalByStatus('OPEN')" class="journal-filter-btn px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition" data-status="OPEN">🟢 Açık</button>
+                        <button onclick="filterJournalByStatus('WIN_TP')" class="journal-filter-btn px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition" data-status="WIN_TP">🎯 Kâr (TP)</button>
+                        <button onclick="filterJournalByStatus('LOSS_SL')" class="journal-filter-btn px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition" data-status="LOSS_SL">🛑 Zarar (SL)</button>
+                        <button onclick="filterJournalByStatus('CLOSED')" class="journal-filter-btn px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition" data-status="CLOSED">⚪ Kapatıldı</button>
+                    </div>
+
+                    <!-- Arama Çubuğu -->
+                    <div class="relative flex-1 sm:w-48">
+                        <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"></i>
+                        <input id="journalSearchInput" oninput="applyJournalFilters()" type="text" placeholder="Coin ara (BTC, SOL)..." class="w-full bg-gray-950 border border-gray-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono">
+                    </div>
+                </div>
+
+                <!-- ➕ YENİ İŞLEM EKLE BUTONU -->
+                <button onclick="openNewTradeModal()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-500 hover:to-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/20 active:scale-95 transition cursor-pointer">
+                    <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                    <span>+ Yeni İşlem Kaydet</span>
+                </button>
+            </div>
+
+            <!-- 📋 İŞLEMLER LİSTESİ / TABLOSU -->
+            <div class="glass-panel rounded-3xl border border-gray-800 overflow-hidden shadow-2xl">
+                <!-- Desktop Tablo Görünümü -->
+                <div class="hidden md:block overflow-x-auto">
+                    <table class="w-full text-left text-xs font-sans">
+                        <thead class="bg-gray-950/80 border-b border-gray-800 text-gray-400 font-mono uppercase tracking-wider text-[11px]">
+                            <tr>
+                                <th class="p-3.5">Parite / Tarih</th>
+                                <th class="p-3.5">Yön</th>
+                                <th class="p-3.5">Giriş / SL / TP</th>
+                                <th class="p-3.5">Çıkış Fiyatı</th>
+                                <th class="p-3.5">R:R</th>
+                                <th class="p-3.5">Net Kâr (PnL)</th>
+                                <th class="p-3.5">Durum</th>
+                                <th class="p-3.5">Strateji & Not</th>
+                                <th class="p-3.5 text-right">Aksiyon</th>
+                            </tr>
+                        </thead>
+                        <tbody id="journalTableBody" class="divide-y divide-gray-800/60 font-mono">
+                            <!-- JS ile doldurulacak -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Mobil Kart Görünümü (md altı ekranlar) -->
+                <div id="journalMobileCardList" class="md:hidden p-3 space-y-3">
+                    <!-- JS ile doldurulacak -->
+                </div>
+
+                <!-- Boş Durum Kutusu -->
+                <div id="journalEmptyState" class="hidden p-12 text-center space-y-3">
+                    <div class="w-12 h-12 rounded-2xl bg-gray-900 border border-gray-800 flex items-center justify-center mx-auto text-gray-500">
+                        <i data-lucide="inbox" class="w-6 h-6"></i>
+                    </div>
+                    <div class="text-sm font-bold text-gray-400">Henüz kayıtlı bir işlem bulunamadı.</div>
+                    <p class="text-xs text-gray-500 max-w-sm mx-auto">
+                        Yukarıdaki <strong>"+ Yeni İşlem Kaydet"</strong> butonuna tıklayarak ilk işleminizi günlüğe ekleyebilirsiniz.
+                    </p>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ============================================================= -->
+        <!-- 📝 SEKME 2: TRADE NOTLARI & ÖZEL FİYAT ALARMLARI -->
+        <!-- ============================================================= -->
+        <section id="sectionNotes" class="hidden space-y-6">
+
+            <!-- 🌟 TANITIM BANNERI -->
+            <div class="relative overflow-hidden rounded-3xl border border-amber-500/30 glass-panel p-6 shadow-2xl">
+                <div class="absolute -right-16 -top-16 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                <div class="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div class="space-y-1 max-w-2xl">
+                        <div class="flex items-center gap-2">
+                            <span class="px-2.5 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 font-mono font-bold text-[11px] border border-amber-500/40">
+                                🔔 7/24 CANLI FİYAT VE NOT ALARM MOTORU
+                            </span>
+                        </div>
+                        <h2 class="text-lg sm:text-2xl font-black text-white tracking-tight">
+                            Özel Fiyat Hedefleri, Analiz Notları & Anlık Telegram Bildirimi
+                        </h2>
+                        <p class="text-xs text-gray-300 leading-relaxed">
+                            İzlemek istediğiniz bir coin için hedef fiyat ve stratejik notunuzu kaydedin. 
+                            Fiyat belirlediğiniz seviyeye ulaştığında sistem <strong>Telegram botunuza analiz notunuzla birlikte anında alarm</strong> iletir.
+                        </p>
+                    </div>
+
+                    <!-- ➕ YENİ NOT & ALARM BUTONU -->
+                    <button onclick="openNewNoteModal()" class="w-full md:w-auto px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-black text-xs flex items-center justify-center gap-2 shadow-xl shadow-amber-500/20 active:scale-95 transition cursor-pointer shrink-0">
+                        <i data-lucide="bell-plus" class="w-4 h-4"></i>
+                        <span>+ Yeni Fiyat Alarmı & Not Ekle</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 🎛️ NOT FİLTRELERİ -->
+            <div class="flex items-center justify-between gap-3 p-3 rounded-2xl bg-gray-950/80 border border-gray-800">
+                <div class="flex items-center gap-1.5">
+                    <button onclick="filterNotesByStatus('ALL')" class="note-filter-btn px-3 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 font-bold text-xs border border-amber-500/40 transition" data-status="ALL">Tümü</button>
+                    <button onclick="filterNotesByStatus('ACTIVE')" class="note-filter-btn px-3 py-1.5 rounded-xl text-gray-400 font-bold text-xs hover:text-white transition" data-status="ACTIVE">🔴 Canlı İzlenenler</button>
+                    <button onclick="filterNotesByStatus('TRIGGERED')" class="note-filter-btn px-3 py-1.5 rounded-xl text-gray-400 font-bold text-xs hover:text-white transition" data-status="TRIGGERED">🟢 Hedefe Ulaşanlar</button>
+                </div>
+
+                <span id="activeNotesCountBadge" class="text-xs font-mono text-gray-400">
+                    <b id="activeNotesCount" class="text-amber-400 font-bold">0</b> aktif alarm izleniyor
+                </span>
+            </div>
+
+            <!-- 🗂️ NOTLAR & ALARMLAR KART IZGARASI -->
+            <div id="notesCardGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- JS ile kartlar dolacak -->
+            </div>
+
+            <!-- Boş Not Durumu -->
+            <div id="notesEmptyState" class="hidden glass-panel rounded-3xl border border-gray-800 p-12 text-center space-y-3">
+                <div class="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+                    <i data-lucide="bell-off" class="w-6 h-6"></i>
+                </div>
+                <div class="text-sm font-bold text-gray-300">Henüz kayıtlı bir fiyat alarmı veya not bulunmuyor.</div>
+                <p class="text-xs text-gray-500 max-w-sm mx-auto">
+                    Yukarıdaki <strong>"+ Yeni Fiyat Alarmı & Not Ekle"</strong> butonuna tıklayarak ilk takip hedefinizi belirleyebilirsiniz.
+                </p>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- ============================================================= -->
+    <!-- 🪟 MODAL 1: YENİ İŞLEM KAYDETME / DÜZENLEME (JOURNAL MODAL) -->
+    <!-- ============================================================= -->
+    <div id="tradeModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div class="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-950/80">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="book-marked" class="w-5 h-5 text-indigo-400"></i>
+                    <h3 id="tradeModalTitle" class="text-sm font-bold text-white">Yeni İşlem Kaydı Ekle</h3>
+                </div>
+                <button onclick="closeTradeModal()" class="w-8 h-8 rounded-xl bg-gray-800 text-gray-400 hover:text-white flex items-center justify-center">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <form id="tradeForm" onsubmit="handleTradeFormSubmit(event)" class="p-5 overflow-y-auto space-y-4 text-xs font-sans">
+                <input type="hidden" id="tradeFormId">
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-gray-400 font-medium mb-1">🪙 Parite (Symbol)</label>
+                        <input id="tradeFormSymbol" type="text" placeholder="BTC/USDT" required class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-mono uppercase focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 font-medium mb-1">🧭 İşlem Yönü</label>
+                        <select id="tradeFormDirection" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-indigo-500">
+                            <option value="LONG">🟢 LONG (Alış)</option>
+                            <option value="SHORT">🔴 SHORT (Satış)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-gray-400 font-medium mb-1">🟡 Giriş (Entry)</label>
+                        <input id="tradeFormEntry" type="number" step="any" placeholder="65000" required class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-yellow-400 font-mono focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 font-medium mb-1">🛑 Stop Loss</label>
+                        <input id="tradeFormStopLoss" type="number" step="any" placeholder="63500" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-rose-400 font-mono focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 font-medium mb-1">🎯 Hedef (TP)</label>
+                        <input id="tradeFormTarget" type="number" step="any" placeholder="68000" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-emerald-400 font-mono focus:outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-gray-400 font-medium mb-1">💼 Pozisyon Büyüklüğü ($)</label>
+                        <input id="tradeFormSize" type="number" step="any" placeholder="1000" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 font-medium mb-1">📊 Pozisyon Durumu</label>
+                        <select id="tradeFormStatus" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-indigo-500">
+                            <option value="OPEN">🟢 Açık Pozisyon</option>
+                            <option value="WIN_TP">🎯 Kâr Alındı (TP)</option>
+                            <option value="LOSS_SL">🛑 Stop Oldu (SL)</option>
+                            <option value="CLOSED">⚪ Manuel Kapatıldı</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-gray-400 font-medium mb-1">🏁 Çıkış Fiyatı (Kapatıldıysa)</label>
+                        <input id="tradeFormExit" type="number" step="any" placeholder="68000" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-cyan-400 font-mono focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 font-medium mb-1">📐 Strateji / Formasyon</label>
+                        <select id="tradeFormStrategy" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-sans focus:outline-none focus:border-indigo-500">
+                            <option value="PDH/PDL Retest">PDH / PDL Breakout Retest</option>
+                            <option value="Swing High/Low Retest">Swing High/Low Retest</option>
+                            <option value="Trendline Breakout">Trend Çizgisi Kırılımı</option>
+                            <option value="Üçgen Formasyonu">Üçgen / Flama Kırılımı</option>
+                            <option value="S/R Flip Retest">S/R Flip Destek/Direnç</option>
+                            <option value="SMC Likidite Sweep">SMC Likidite & Order Block</option>
+                            <option value="Kişisel Analiz" selected>Kişisel Trader Analizi</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-gray-400 font-medium mb-1">📝 Trade Notu & Analiz Açıklaması</label>
+                    <textarea id="tradeFormNotes" rows="3" placeholder="Giriş nedeni, psikoloji, risk planı..." class="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white font-sans focus:outline-none focus:border-indigo-500"></textarea>
+                </div>
+
+                <div class="pt-3 border-t border-gray-800 flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeTradeModal()" class="px-4 py-2 rounded-xl bg-gray-800 text-gray-300 font-bold hover:bg-gray-700 transition">İptal</button>
+                    <button type="submit" class="px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-emerald-600 text-white font-bold transition shadow-lg shadow-indigo-600/20">Kaydet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ============================================================= -->
+    <!-- 🪟 MODAL 2: YENİ NOT & FİYAT ALARMI (NOTES MODAL) -->
+    <!-- ============================================================= -->
+    <div id="noteModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div class="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-950/80">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="bell-ring" class="w-5 h-5 text-amber-400"></i>
+                    <h3 id="noteModalTitle" class="text-sm font-bold text-white">Yeni Fiyat Alarmı & Not Tanımla</h3>
+                </div>
+                <button onclick="closeNoteModal()" class="w-8 h-8 rounded-xl bg-gray-800 text-gray-400 hover:text-white flex items-center justify-center">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <form id="noteForm" onsubmit="handleNoteFormSubmit(event)" class="p-5 overflow-y-auto space-y-4 text-xs font-sans">
+                <input type="hidden" id="noteFormId">
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-gray-400 font-medium mb-1">🪙 Takip Edilecek Coin</label>
+                        <input id="noteFormSymbol" type="text" placeholder="ETH/USDT" required class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-mono uppercase focus:outline-none focus:border-amber-500">
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 font-medium mb-1">🧭 Beklenti / Yön</label>
+                        <select id="noteFormDirection" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500">
+                            <option value="LONG">🟢 LONG (Yükseliş Beklentisi)</option>
+                            <option value="SHORT">🔴 SHORT (Düşüş Beklentisi)</option>
+                            <option value="NÖTR" selected>⚪ NÖTR (Sadece Seviye Takibi)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-gray-400 font-medium mb-1">🎯 Alarm Hedef Fiyatı ($)</label>
+                        <input id="noteFormTarget" type="number" step="any" placeholder="3250.50" required class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-amber-400 font-mono font-bold focus:outline-none focus:border-amber-500">
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 font-medium mb-1">⚡ Tetiklenme Koşulu</label>
+                        <select id="noteFormCondition" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-sans focus:outline-none focus:border-amber-500">
+                            <option value="CROSS_ABOVE">🔺 Fiyat Hedefin Üstüne Çıkarsa</option>
+                            <option value="CROSS_BELOW">🔻 Fiyat Hedefin Altına Düşerse</option>
+                            <option value="PRICE_REACH">🎯 Fiyat Hedefe Yaklaşırsa (%0.2)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-gray-400 font-medium mb-1">📌 Not Başlığı</label>
+                    <input id="noteFormTitle" type="text" placeholder="Örn: 4H Direnç Kırılım Retesti" required class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-white font-sans focus:outline-none focus:border-amber-500">
+                </div>
+
+                <div>
+                    <label class="block text-gray-400 font-medium mb-1">💡 Özel Analiz & Strateji Notunuz</label>
+                    <textarea id="noteFormText" rows="3" placeholder="Fiyat bu seviyeye geldiğinde 15m onay mumu ara, 0.5R ekleme yap..." class="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white font-sans focus:outline-none focus:border-amber-500"></textarea>
+                </div>
+
+                <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="send" class="w-4 h-4 text-amber-400"></i>
+                        <div>
+                            <div class="text-xs font-bold text-amber-300">Telegram'a Anlık Alarm Gönder</div>
+                            <div class="text-[10px] text-gray-400">Hedefe ulaşıldığında botunuza bu notla bildirim iletilir.</div>
+                        </div>
+                    </div>
+                    <input id="noteFormTelegram" type="checkbox" checked class="w-4 h-4 text-amber-500 rounded focus:ring-0 cursor-pointer">
+                </div>
+
+                <div class="pt-3 border-t border-gray-800 flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeNoteModal()" class="px-4 py-2 rounded-xl bg-gray-800 text-gray-300 font-bold hover:bg-gray-700 transition">İptal</button>
+                    <button type="submit" class="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold transition shadow-lg shadow-amber-500/20">Alarmı Başlat</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 📱 MOBİL ALT MENÜ BARI (BOTTOM NAVIGATION BAR) -->
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-gray-950/95 backdrop-blur-xl border-t border-gray-800/90 px-3 py-2 flex items-center justify-around shadow-2xl safe-area-bottom">
+        <a href="/index.html" class="flex flex-col items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-white transition">
+            <i data-lucide="zap" class="w-4 h-4 text-gray-400"></i>
+            <span>Sinyaller</span>
+        </a>
+        <a href="/my_strategy.html" class="flex flex-col items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-cyan-400 transition">
+            <i data-lucide="crosshair" class="w-4 h-4"></i>
+            <span>Özel Strateji</span>
+        </a>
+        <a href="/backtest.html" class="flex flex-col items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-amber-400 transition">
+            <i data-lucide="flask-conical" class="w-4 h-4"></i>
+            <span>Backtest</span>
+        </a>
+        <a href="/journal.html" class="flex flex-col items-center gap-1 text-[10px] font-bold text-indigo-400 hover:text-indigo-300 transition">
+            <i data-lucide="book-open" class="w-4 h-4 text-indigo-400"></i>
+            <span>Günlük & Not</span>
+        </a>
+        <button onclick="openTelegramModal()" class="flex flex-col items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-sky-400 transition cursor-pointer">
+            <i data-lucide="bell" class="w-4 h-4"></i>
+            <span>Telegram</span>
+        </button>
+    </nav>
+    <div class="h-16 md:hidden"></div>
+
+    <!-- JavaScript Dosyaları -->
+    <script src="/static/js/chart.js?v=3.2"></script>
+    <script src="/static/js/telegram.js?v=3.2"></script>
+    <script src="/static/js/journal.js?v=1.0"></script>
+</body>
+</html>

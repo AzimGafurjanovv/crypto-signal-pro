@@ -185,3 +185,59 @@ def send_confirmed_alert(coin_data: Dict[str, Any], strategy_type: str = "PDH_PD
 
     res = send_telegram_raw_message(bot_token, chat_id, text)
     return res.get("status") == "success"
+
+
+def send_trade_note_alert(note_data: Dict[str, Any], current_price: float) -> bool:
+    """
+    Kullanıcının özel olarak tanımladığı Trade Notu ve Fiyat Alarmı hedefe ulaştığında Telegram mesajı iletir.
+    """
+    config = load_telegram_config()
+    if not config.get("enabled", False):
+        return False
+
+    bot_token = config.get("bot_token")
+    chat_id = config.get("chat_id")
+    if not bot_token or not chat_id:
+        return False
+
+    symbol = note_data.get("symbol", "BTC/USDT")
+    target_price = float(note_data.get("target_price", 0.0))
+    direction = note_data.get("direction_bias", "NÖTR")
+    note_title = note_data.get("note_title", "Özel Hedef Takibi")
+    note_text = note_data.get("note_text", "")
+    cond_type = note_data.get("condition_type", "CROSS_ABOVE")
+    created_at_str = note_data.get("created_at_str", "")
+
+    cond_labels = {
+        "CROSS_ABOVE": "🔺 Yukarı Kırılım / Üstüne Çıkış",
+        "CROSS_BELOW": "🔻 Aşağı Kırılım / Altına Düşüş",
+        "PRICE_REACH": "🎯 Hedef Seviyeye Temas"
+    }
+    cond_str = cond_labels.get(cond_type, cond_type)
+
+    dir_icon = "🟢 LONG" if direction == "LONG" else ("🔴 SHORT" if direction == "SHORT" else "⚪ NÖTR")
+
+    text = f"""<b>🔔 [ÖZEL TRADE NOTU ALARMI] HEDEFE ULAŞILDI!</b>
+
+<b>🪙 Parite:</b> <code>{symbol}</code>
+<b>🧭 Stratejik Yön:</b> <b>{dir_icon}</b>
+<b>⚡ Tetiklenen Koşul:</b> {cond_str}
+
+━━━━━━━━━━━━━━━━━━━━
+🎯 <b>Belirlediğiniz Hedef:</b> <code>${target_price:,.4f}</code>
+📊 <b>Anlık Canlı Fiyat:</b> <code>${current_price:,.4f}</code>
+━━━━━━━━━━━━━━━━━━━━
+
+📝 <b>NOT BAŞLIĞI:</b>
+<b>{note_title}</b>
+
+💡 <b>ÖZEL TRADE NOTUNUZ & ANALİZİNİZ:</b>
+<i>"{note_text if note_text else 'Belirlenen hedef fiyat seviyesine ulaşıldı, pozisyonu kontrol ediniz.'}"</i>
+
+⏰ <b>Oluşturulma:</b> {created_at_str}
+⏰ <b>Tetiklenme Zamanı:</b> {time.strftime('%Y-%m-%d %H:%M:%S UTC')}
+
+🔗 <a href="http://47.251.110.202/journal.html">Trade Günlüğü & Not Masasını Aç</a>"""
+
+    res = send_telegram_raw_message(bot_token, chat_id, text)
+    return res.get("status") == "success"

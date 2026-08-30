@@ -27,7 +27,8 @@ from engine.backtest_engine import run_strategy_backtest
 from engine.pdh_pdl_radar import run_pdh_pdl_radar
 from engine.swing_radar import run_swing_radar
 from engine.pattern_radar import run_pattern_radar
-from engine.telegram_notifier import load_telegram_config, save_telegram_config, send_telegram_raw_message
+from engine.telegram_notifier import load_telegram_config, save_telegram_config, send_telegram_raw_message, send_trade_note_alert
+from engine.trade_journal_service import trade_journal_manager, trade_notes_manager
 from engine.strategy_alert_service import telegram_alert_service
 from engine.gemini_engine import analyze_with_gemini, get_active_gemini_key, chat_with_gemini, discover_available_gemini_models
 
@@ -134,21 +135,47 @@ class ServerBackgroundScanner:
 
 bg_scanner = ServerBackgroundScanner()
 
+async def trade_notes_monitoring_loop():
+    """Arka planda her 30 saniyede bir kullanıcının özel trade notları ve fiyat alarmlarını kontrol eder."""
+    while True:
+        try:
+            triggered = await asyncio.to_thread(trade_notes_manager.check_and_trigger_alerts)
+            for item in triggered:
+                note = item.get("note", {})
+                curr_p = item.get("current_price", 0.0)
+                if note.get("telegram_notify", True):
+                    print(f"📢 [TRADE NOTE ALARM] {note.get('symbol')} hedefine (${note.get('target_price')}) ulaştı! Telegram gönderiliyor...")
+                    try:
+                        send_trade_note_alert(note, curr_p)
+                    except Exception as te:
+                        print(f"⚠️ Telegram trade note alert error: {te}")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"⚠️ Trade note monitor loop error: {e}")
+        await asyncio.sleep(30)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Sunucu başlatıldığında arka plan işçilerini başlat
     scan_task = asyncio.create_task(bg_scanner.background_loop())
     telegram_task = asyncio.create_task(telegram_alert_service.start_loop())
+    notes_task = asyncio.create_task(trade_notes_monitoring_loop())
     yield
     # Sunucu kapatılırken iptal et
     scan_task.cancel()
     telegram_task.cancel()
+    notes_task.cancel()
     try:
         await scan_task
     except asyncio.CancelledError:
         pass
     try:
         await telegram_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await notes_task
     except asyncio.CancelledError:
         pass
 
@@ -767,6 +794,103 @@ def sanitize_json(data: Any) -> Any:
             return 0.0
         return data
     return data
+
+
+# -------------------------------------------------------------
+# 📖 TRADE GÜNLÜĞÜ (TRADING JOURNAL) & 📝 TRADE NOTLARI MODELLERİ
+# -------------------------------------------------------------
+class TradeJournalItemRequest(BaseModel):
+    symbol: str
+    direction: str = "LONG"
+    entry_price: float
+    target_price: Optional[float] = 0.0
+    stop_loss: Optional[float] = 0.0
+    exit_price: Optional[float] = None
+    status: Optional[str] = "OPEN"
+    position_size: Optional[float] = 0.0
+    strategy: Optional[str] = "Kişisel Analiz"
+    notes: Optional[str] = ""
+    entry_date_str: Optional[str] = None
+    exit_date_str: Optional[str] = None
+
+class TradeNoteItemRequest(BaseModel):
+    symbol: str
+    target_price: float
+    created_price: Optional[float] = 0.0
+    condition_type: Optional[str] = "CROSS_ABOVE"
+    direction_bias: Optional[str] = "NÖTR"
+    note_title: Optional[str] = "Özel Hedef Takibi"
+    note_text: Optional[str] = ""
+    telegram_notify: Optional[bool] = True
+
+@app.get("/journal")
+@app.get("/journal.html")
+async def serve_journal():
+    return FileResponse(os.path.join(frontend_dir, "journal.html"))
+
+# --- 📖 TRADE GÜNLÜĞÜ (JOURNAL) API ---
+@app.get("/api/journal")
+async def get_journal_trades(status: Optional[str] = Query("ALL"), symbol: Optional[str] = None):
+    trades = trade_journal_manager.get_all_trades(status=status, symbol=symbol)
+    return sanitize_json({"status": "success", "trades": trades})
+
+@app.get("/api/journal/stats")
+async def get_journal_stats():
+    stats = trade_journal_manager.get_stats()
+    return sanitize_json({"status": "success", "stats": stats})
+
+@app.post("/api/journal")
+async def add_journal_trade(req: TradeJournalItemRequest):
+    new_trade = trade_journal_manager.add_trade(req.dict())
+    return sanitize_json({"status": "success", "trade": new_trade, "message": "İşlem günlüğe kaydedildi."})
+
+@app.put("/api/journal/{trade_id}")
+async def update_journal_trade(trade_id: str, updates: Dict[str, Any]):
+    updated = trade_journal_manager.update_trade(trade_id, updates)
+    if not updated:
+        raise HTTPException(status_code=404, detail="İşlem bulunamadı.")
+    return sanitize_json({"status": "success", "trade": updated, "message": "İşlem güncellendi."})
+
+@app.delete("/api/journal/{trade_id}")
+async def delete_journal_trade(trade_id: str):
+    success = trade_journal_manager.delete_trade(trade_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="İşlem bulunamadı.")
+    return {"status": "success", "message": "İşlem günlükten silindi."}
+
+
+# --- 📝 TRADE NOTLARI & ÖZEL FİYAT ALARMI API ---
+@app.get("/api/trade-notes")
+async def get_trade_notes():
+    notes = trade_notes_manager.get_all_notes()
+    return sanitize_json({"status": "success", "notes": notes})
+
+@app.post("/api/trade-notes")
+async def add_trade_note(req: TradeNoteItemRequest):
+    new_note = trade_notes_manager.add_note(req.dict())
+    return sanitize_json({"status": "success", "note": new_note, "message": "Özel trade notu ve fiyat alarmı kaydedildi."})
+
+@app.put("/api/trade-notes/{note_id}")
+async def update_trade_note(note_id: str, updates: Dict[str, Any]):
+    updated = trade_notes_manager.update_note(note_id, updates)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Not bulunamadı.")
+    return sanitize_json({"status": "success", "note": updated, "message": "Not güncellendi."})
+
+@app.post("/api/trade-notes/{note_id}/toggle")
+async def toggle_trade_note(note_id: str):
+    toggled = trade_notes_manager.toggle_note_active(note_id)
+    if not toggled:
+        raise HTTPException(status_code=404, detail="Not bulunamadı.")
+    return sanitize_json({"status": "success", "note": toggled, "message": "Alarm durumu değiştirildi."})
+
+@app.delete("/api/trade-notes/{note_id}")
+async def delete_trade_note(note_id: str):
+    success = trade_notes_manager.delete_note(note_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Not bulunamadı.")
+    return {"status": "success", "message": "Trade notu ve alarmı silindi."}
+
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,31 +1,45 @@
 """
-CryptoSignalPro AI - 7/24 Akıllı Anti-Spam Radar Alarm Servisi (strategy_alert_service.py)
+CryptoSignalPro AI - Strateji Telegram Bildirim & Akıllı Anti-Spam Servisi (v11.0.0)
 
-Özellikler:
-1. Her coin ve kurulum (setup) için YALNIZCA BİR KEZ alarm gönderir.
-2. Fiyat aynı kurulum içinde kaldığı sürece ASLA mükerrer (spam) bildirim göndermez.
-3. Ancak o işlem tamamlanır, stop olur veya geçersiz kılınır ve DAHA SONRA YENİ BİR KURULUM (yeni kırılım döngüsü) oluşursa tekrar alarm gönderir.
-4. Gönderilen alarmları diskte (alert_history.json) saklar, sunucu yeniden başlasa bile eski alarmları tekrar atmaz.
+Gelişmiş Çok Kademeli Anti-Spam & Bekleme (Cooldown) Mimarisi:
+1. Başarısızlık & Dalgalanma Koruması (Anti-Flapping):
+   - Bir coin retest bölgesine girip alarm attıktan sonra başarısız olup seviyeden düşerse ve tekrar girerse spam yapamaz.
+   - Her parite ve yön için RETEST alarmı sonrası EN AZ 4 SAAT (14,400 saniye) soğuma süresi (Cooldown) uygulanır.
+2. Kesin Giriş Kilidi:
+   - ONAYLANDI (3. Aşama) alarmı gönderildikten sonra aynı pariteye 6 SAAT boyunca yeni sinyal gönderilmez.
+3. Çift Katmanlı Tekilleştirme:
+   - Hem spesifik Setup ID (seviye + formasyon adı) hem de Parite/Yön anahtarı (Symbol + Direction + TF) üzerinden çifte kilit kontrol edilir.
+4. Başlangıç Isınması (Warmup):
+   - Sunucu açıldığında veya Telegram servisi aktif edildiğinde mevcut eski sinyaller önbelleğe alınır, kullanıcıya spam atılmaz.
 """
 
 import os
 import json
 import time
 import asyncio
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
+from datetime import datetime
+
+from engine.market_data import market_manager
 from engine.pdh_pdl_radar import run_pdh_pdl_radar
 from engine.swing_radar import run_swing_radar
 from engine.pattern_radar import run_pattern_radar
 from engine.telegram_notifier import load_telegram_config, send_retest_alert, send_confirmed_alert
 
+
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 HISTORY_FILE = os.path.join(DATA_DIR, "alert_history.json")
+
+# ⏱️ AKILLI SOĞUMA SÜRELERİ (SANİYE)
+RETEST_COOLDOWN_SECONDS = 4 * 3600    # 4 Saat (Başarısız olup tekrar girerse spam yapmaz)
+CONFIRMED_COOLDOWN_SECONDS = 6 * 3600 # 6 Saat (İşlem gerçekleştikten sonra uzun koruma)
+
 
 class StrategyAlertService:
     def __init__(self):
         self.is_running: bool = False
         self.is_warmed_up: bool = False
-        self.interval_seconds: int = 60 # Her 60 saniyede bir tara
+        self.interval_seconds: int = 60 # Her 60 saniyede bir kontrol et
         self.history: Dict[str, Dict[str, Any]] = self._load_history()
 
     def _load_history(self) -> Dict[str, Dict[str, Any]]:
@@ -64,13 +78,12 @@ class StrategyAlertService:
 
     async def start_loop(self):
         self.is_running = True
-        print("🔔 [TELEGRAM RADAR SERVICE] Akıllı Anti-Spam & Tazelik Filtreli Alarm Servisi Başlatıldı.")
+        print("🔔 [TELEGRAM RADAR SERVICE] 4 Saatlik Akıllı Anti-Spam & Cooldown Filtreli Alarm Servisi Başlatıldı.")
         
         while self.is_running:
             try:
                 config = load_telegram_config()
                 if config.get("enabled", False) and (config.get("notify_retest") or config.get("notify_confirmed")):
-                    # Always run warmup first if not yet warmed up
                     if not self.is_warmed_up:
                         print("⏳ [TELEGRAM] Başlangıç ısınması yapılıyor (Eski sinyaller önbelleğe alınıyor)...")
                         try:
@@ -121,103 +134,134 @@ class StrategyAlertService:
 
         await asyncio.to_thread(self._cleanup_old_history)
 
+    def _get_coin_cooldown_key(self, symbol: str, strat_type: str, tf: str, direction: str) -> str:
+        """Parite, strateji ve yön bazlı ana soğuma anahtarı."""
+        return f"COOLDOWN_{strat_type}_{tf}_{symbol}_{direction}"
+
     def _get_setup_identifier(self, coin: Dict[str, Any], strat_type: str, tf: str) -> str:
         symbol = coin.get("symbol", "")
         direction = coin.get("direction", "")
-        # Round to 2 decimal places to avoid float precision spam (94.0 vs 94.00001)
         raw_level = coin.get("breakout_level") or coin.get("pdh") or coin.get("pdl") or coin.get("swing_level", 0.0)
         bo_level = round(float(raw_level or 0.0), 2)
-        bo_bar = coin.get("breakout_bar") or {}
-        bo_time = bo_bar.get("time_str") or bo_bar.get("iso_time") or str(bo_bar.get("timestamp", ""))
         pat_name = coin.get("strategy_name", "")
-        return f"{strat_type}_{tf}_{symbol}_{direction}_{bo_level}_{bo_time}_{pat_name}"
+        return f"{strat_type}_{tf}_{symbol}_{direction}_{bo_level}_{pat_name}"
 
     def _process_stage_alerts(self, stages: Dict[str, Any], strat_type: str, tf: str, config: Dict[str, Any], is_warmup: bool = False):
         now = time.time()
         updated = False
         should_notify_retest = config.get("notify_retest", False)
         should_notify_confirmed = config.get("notify_confirmed", True)
-        enabled_patterns = config.get("enabled_patterns", ["ALL"]) # Formasyon filtre listesi
+        enabled_patterns = config.get("enabled_patterns", ["ALL"])
 
-        # A. 2. Aşama: Retesting Yapanlar (Erken Uyarı)
+        # ─────────────────────────────────────────────────────────────────────
+        # A. 2. Aşama: Retesting Yapanlar (Erken Uyarı + 4 Saatlik Cooldown)
+        # ─────────────────────────────────────────────────────────────────────
         if should_notify_retest:
             for coin in stages.get("retesting", []):
-                # Formasyon filtresi kontrolü
                 if strat_type == "CHART_PATTERNS" and "ALL" not in enabled_patterns:
                     pat_cat = coin.get("pattern_category", "TRENDLINE")
                     if pat_cat not in enabled_patterns:
                         continue
 
-                # Tazelik Filtresi (Son 2 saat = 7200 sn içinde olmalı)
+                symbol = coin.get("symbol", "")
+                direction = coin.get("direction", "")
+                cooldown_key = self._get_coin_cooldown_key(symbol, strat_type, tf, direction)
+                setup_id = self._get_setup_identifier(coin, strat_type, tf)
+
+                cooldown_record = self.history.get(cooldown_key, {})
+                last_retest_ts = cooldown_record.get("last_retest_sent_at", 0)
+                last_confirmed_ts = cooldown_record.get("last_confirmed_sent_at", 0)
+
+                # 🛑 KORUMA 1: 4 Saat içinde bu coine zaten Retest alarmı atılmışsa TEKRAR ATMA (Spam Engeli)
+                if (now - last_retest_ts) < RETEST_COOLDOWN_SECONDS:
+                    continue
+
+                # 🛑 KORUMA 2: 6 Saat içinde zaten Onaylı Giriş atılmışsa Retest atma
+                if (now - last_confirmed_ts) < CONFIRMED_COOLDOWN_SECONDS:
+                    continue
+
+                # Tazelik Filtresi (Son 2 saat içinde olmalı)
                 rt_bar = coin.get("retest_bar") or {}
                 rt_ts = rt_bar.get("timestamp", 0) if isinstance(rt_bar, dict) else 0
                 if rt_ts > 0 and (now - rt_ts) > 7200:
-                    continue # Eski bar, bildirim atma
-
-                setup_id = self._get_setup_identifier(coin, strat_type, tf)
-                record = self.history.get(setup_id, {
-                    "retest_sent": False,
-                    "confirmed_sent": False,
-                    "created_at": now,
-                    "last_updated": now
-                })
+                    continue
 
                 if is_warmup:
-                    record["retest_sent"] = True
-                    self.history[setup_id] = record
+                    self.history[cooldown_key] = {
+                        "last_retest_sent_at": now,
+                        "last_updated": now
+                    }
                     updated = True
                     continue
 
-                if not record.get("retest_sent", False) and not record.get("confirmed_sent", False):
-                    print(f"📢 [TELEGRAM] 2. Aşama RETEST Alarmı İletiliyor: {coin.get('symbol')} ({strat_type})")
-                    success = send_retest_alert(coin, strategy_type=strat_type)
-                    if success:
-                        record["retest_sent"] = True
-                        record["retest_time"] = time.strftime("%Y-%m-%d %H:%M:%S")
-                        record["last_updated"] = now
-                        self.history[setup_id] = record
-                        updated = True
+                print(f"📢 [TELEGRAM] 2. Aşama RETEST Alarmı İletiliyor: {symbol} ({strat_type})")
+                success = send_retest_alert(coin, strategy_type=strat_type)
+                if success:
+                    self.history[cooldown_key] = {
+                        "last_retest_sent_at": now,
+                        "last_retest_time_str": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "last_updated": now
+                    }
+                    # Setup ID kaydı da tut
+                    self.history[setup_id] = {
+                        "retest_sent": True,
+                        "created_at": now,
+                        "last_updated": now
+                    }
+                    updated = True
 
-        # B. 3. Aşama: Onaylananlar (Kesin Giriş Sinyali)
+        # ─────────────────────────────────────────────────────────────────────
+        # B. 3. Aşama: Onaylananlar (Kesin Giriş Sinyali + 6 Saatlik Cooldown)
+        # ─────────────────────────────────────────────────────────────────────
         if should_notify_confirmed:
             for coin in stages.get("confirmed", []):
-                # Formasyon filtresi kontrolü
                 if strat_type == "CHART_PATTERNS" and "ALL" not in enabled_patterns:
                     pat_cat = coin.get("pattern_category", "TRENDLINE")
                     if pat_cat not in enabled_patterns:
                         continue
 
-                # Tazelik Filtresi (Son 2 saat = 7200 sn içinde olmalı)
+                symbol = coin.get("symbol", "")
+                direction = coin.get("direction", "")
+                cooldown_key = self._get_coin_cooldown_key(symbol, strat_type, tf, direction)
+                setup_id = self._get_setup_identifier(coin, strat_type, tf)
+
+                cooldown_record = self.history.get(cooldown_key, {})
+                last_confirmed_ts = cooldown_record.get("last_confirmed_sent_at", 0)
+
+                # 🛑 KORUMA 3: 6 Saat içinde bu coine zaten Onaylı Giriş atılmışsa TEKRAR ATMA
+                if (now - last_confirmed_ts) < CONFIRMED_COOLDOWN_SECONDS:
+                    continue
+
                 conf_bar = coin.get("confirmed_bar") or {}
                 conf_ts = conf_bar.get("timestamp", 0) if isinstance(conf_bar, dict) else 0
                 if conf_ts > 0 and (now - conf_ts) > 7200:
-                    continue # Eski bar, bildirim atma
-
-                setup_id = self._get_setup_identifier(coin, strat_type, tf)
-                record = self.history.get(setup_id, {
-                    "retest_sent": False,
-                    "confirmed_sent": False,
-                    "created_at": now,
-                    "last_updated": now
-                })
+                    continue
 
                 if is_warmup:
-                    record["confirmed_sent"] = True
-                    self.history[setup_id] = record
+                    self.history[cooldown_key] = {
+                        "last_confirmed_sent_at": now,
+                        "last_updated": now
+                    }
                     updated = True
                     continue
 
-                if not record.get("confirmed_sent", False):
-                    print(f"🔥 [TELEGRAM] 3. Aşama KESİN GİRİŞ Alarmı İletiliyor: {coin.get('symbol')} ({strat_type})")
-                    success = send_confirmed_alert(coin, strategy_type=strat_type)
-                    if success:
-                        record["confirmed_sent"] = True
-                        record["confirmed_time"] = time.strftime("%Y-%m-%d %H:%M:%S")
-                        record["last_updated"] = now
-                        self.history[setup_id] = record
-                        updated = True
+                print(f"🔥 [TELEGRAM] 3. Aşama KESİN GİRİŞ Alarmı İletiliyor: {symbol} ({strat_type})")
+                success = send_confirmed_alert(coin, strategy_type=strat_type)
+                if success:
+                    self.history[cooldown_key] = {
+                        "last_retest_sent_at": cooldown_record.get("last_retest_sent_at", now),
+                        "last_confirmed_sent_at": now,
+                        "last_confirmed_time_str": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "last_updated": now
+                    }
+                    self.history[setup_id] = {
+                        "confirmed_sent": True,
+                        "last_updated": now
+                    }
+                    updated = True
 
         if updated:
             self._save_history()
+
 
 telegram_alert_service = StrategyAlertService()

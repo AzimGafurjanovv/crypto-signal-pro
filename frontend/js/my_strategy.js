@@ -271,9 +271,10 @@ function renderColumnList(containerId, coins, type) {
     el.innerHTML = '';
     coins.forEach(c => {
         const isLong = c.direction === 'LONG';
-        const levelName = activeStrategy === 'PDH_PDL' 
+        const levelLabel = activeStrategy === 'PDH_PDL' 
             ? (isLong ? 'PDH' : 'PDL')
             : (activeStrategy === 'SWING_HL' ? (isLong ? 'Swing High' : 'Swing Low') : (c.strategy_name || 'Formasyon'));
+        const levelName = levelLabel;
 
         const levelPrice = c.breakout_level || (isLong ? (c.pdh || c.swing_level) : (c.pdl || c.swing_level));
 
@@ -411,7 +412,7 @@ function renderColumnList(containerId, coins, type) {
             `;
         }
 
-        container.appendChild(card);
+        el.appendChild(card);
     });
 }
 
